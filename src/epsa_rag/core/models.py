@@ -5,24 +5,40 @@ from __future__ import annotations
 import math
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from epsa_rag.core.ids import Identifier
 
-NonEmptyText = Annotated[str, Field(min_length=1)]
+
+def validate_non_empty_text(value: str) -> str:
+    """Reject blank text without altering source whitespace."""
+
+    if not value.strip():
+        raise ValueError("text must not be blank")
+    return value
+
+
+NonEmptyText = Annotated[str, Field(min_length=1), AfterValidator(validate_non_empty_text)]
 
 
 class ContractModel(BaseModel):
     """Strict, immutable base for cross-component data contracts."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class Sentence(ContractModel):
     """A sentence retaining its native zero-based paragraph index."""
 
     index: Annotated[int, Field(ge=0)]
-    text: NonEmptyText
+    text: str
 
 
 class ParagraphChunk(ContractModel):
@@ -31,15 +47,17 @@ class ParagraphChunk(ContractModel):
     chunk_id: Identifier
     title: NonEmptyText
     paragraph_text: NonEmptyText
-    sentences: tuple[Sentence, ...]
+    sentences: Annotated[tuple[Sentence, ...], Field(min_length=1)]
 
     @model_validator(mode="after")
     def validate_sentence_order(self) -> ParagraphChunk:
         """Require sentence indices to be unique and strictly increasing."""
 
         indices = [sentence.index for sentence in self.sentences]
-        if indices != sorted(set(indices)):
-            raise ValueError("sentence indices must be unique and strictly increasing")
+        if indices != list(range(len(self.sentences))):
+            raise ValueError("sentence indices must be contiguous and zero-based")
+        if self.paragraph_text != "".join(sentence.text for sentence in self.sentences):
+            raise ValueError("paragraph_text must equal the exact ordered sentence concatenation")
         return self
 
 
@@ -57,6 +75,9 @@ class RankedParagraphChunk(ContractModel):
     rank: Annotated[int, Field(ge=1)]
     score: float
     source_scores: dict[Identifier, float] = Field(default_factory=dict)
+    source_ranks: dict[Identifier, Annotated[int, Field(ge=1)]] = Field(
+        default_factory=dict
+    )
 
     @field_validator("score")
     @classmethod
@@ -76,3 +97,9 @@ class RankedParagraphChunk(ContractModel):
             raise ValueError("source scores must be finite")
         return value.copy()
 
+    @field_validator("source_ranks")
+    @classmethod
+    def detach_source_ranks(cls, value: dict[str, int]) -> dict[str, int]:
+        """Detach caller-owned rank dictionaries."""
+
+        return value.copy()

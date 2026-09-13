@@ -13,7 +13,7 @@ def make_chunk() -> ParagraphChunk:
         chunk_id="chunk:alpha",
         title="Alpha",
         paragraph_text="First. Second.",
-        sentences=(Sentence(index=0, text="First."), Sentence(index=1, text="Second.")),
+        sentences=(Sentence(index=0, text="First."), Sentence(index=1, text=" Second.")),
     )
 
 
@@ -36,7 +36,7 @@ def test_paragraph_chunk_round_trips_as_json_without_gold_labels() -> None:
 def test_paragraph_chunk_rejects_invalid_sentence_order(
     sentences: tuple[Sentence, ...],
 ) -> None:
-    with pytest.raises(ValidationError, match="strictly increasing"):
+    with pytest.raises(ValidationError, match="contiguous and zero-based"):
         ParagraphChunk(
             chunk_id="chunk:alpha",
             title="Alpha",
@@ -45,14 +45,39 @@ def test_paragraph_chunk_rejects_invalid_sentence_order(
         )
 
 
-def test_contracts_strip_text_and_reject_unknown_fields() -> None:
+def test_paragraph_chunk_rejects_reconstructed_or_missing_sentence_structure() -> None:
+    with pytest.raises(ValidationError, match="exact ordered sentence"):
+        ParagraphChunk(
+            chunk_id="chunk:alpha",
+            title="Alpha",
+            paragraph_text="First. Second.",
+            sentences=(Sentence(index=0, text="First."), Sentence(index=1, text="Second.")),
+        )
+
+    with pytest.raises(ValidationError, match="at least 1"):
+        ParagraphChunk(
+            chunk_id="chunk:alpha",
+            title="Alpha",
+            paragraph_text="Text.",
+            sentences=(),
+        )
+
+
+def test_contracts_preserve_text_and_reject_unknown_fields() -> None:
     query = RetrievalQuery(text="  Who wrote it?  ", question_id="  q-1  ")
 
-    assert query.text == "Who wrote it?"
+    assert query.text == "  Who wrote it?  "
     assert query.question_id == "q-1"
 
     with pytest.raises(ValidationError):
         RetrievalQuery(text="Question?", backend_hint="dense")
+
+
+def test_contracts_reject_blank_queries_but_preserve_empty_native_sentences() -> None:
+    with pytest.raises(ValidationError, match="must not be blank"):
+        RetrievalQuery(text="   ")
+
+    assert Sentence(index=0, text="").text == ""
 
 
 def test_ranked_chunk_serializes_backend_independent_scores() -> None:
@@ -61,11 +86,13 @@ def test_ranked_chunk_serializes_backend_independent_scores() -> None:
         rank=1,
         score=0.75,
         source_scores={"bm25": 2.5, "dense": 0.8},
+        source_ranks={"bm25": 1, "dense": 2},
     )
     restored = RankedParagraphChunk.model_validate_json(result.model_dump_json())
 
     assert restored == result
     assert restored.source_scores == {"bm25": 2.5, "dense": 0.8}
+    assert restored.source_ranks == {"bm25": 1, "dense": 2}
 
 
 @pytest.mark.parametrize("score", [math.inf, -math.inf, math.nan])
@@ -83,3 +110,12 @@ def test_ranked_chunk_rejects_non_finite_source_scores() -> None:
             source_scores={"dense": math.nan},
         )
 
+
+def test_ranked_chunk_rejects_invalid_source_ranks() -> None:
+    with pytest.raises(ValidationError, match="greater than or equal to 1"):
+        RankedParagraphChunk(
+            chunk=make_chunk(),
+            rank=1,
+            score=1.0,
+            source_ranks={"dense": 0},
+        )

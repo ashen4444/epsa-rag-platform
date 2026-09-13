@@ -9,8 +9,16 @@ description = "Research platform for the Evidence Path Sufficiency Algorithm."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "faiss-cpu>=1.13,<2",
+    "numpy>=2,<3",
+    "openai>=2,<3",
     "pydantic>=2.12,<3",
 ]
+
+[project.scripts]
+epsa-prepare-hotpotqa = "epsa_rag.data.pipeline:main"
+epsa-build-retrieval-indexes = "epsa_rag.retrieval.pipeline:main"
+epsa-retrieve = "epsa_rag.retrieval.cli:main"
 
 [project.optional-dependencies]
 dev = [
