@@ -7,7 +7,7 @@ frameworks.
 
 ## Current scope
 
-The Phase 1 foundation, Phase 2 deterministic data pipeline, and Phase 3 Hybrid Retriever exist:
+The Phase 1 foundation, Phase 2 data pipeline, Phase 3 retriever, and Phase 4 evaluator exist:
 
 - validated, serialization-friendly structural and retrieval contracts;
 - stable identifier and configuration fingerprint helpers;
@@ -21,9 +21,11 @@ The Phase 1 foundation, Phase 2 deterministic data pipeline, and Phase 3 Hybrid 
 - exact cosine retrieval using normalized FAISS `IndexFlatIP` vectors;
 - weighted Reciprocal Rank Fusion with canonical ranked paragraph outputs;
 - immutable, corpus-bound BM25 and dense index manifests;
+- exact-paragraph retrieval metrics, serial latency/throughput measurements, and benchmark runs;
+- reproducible run metadata, per-question traces, immutable diagnostic exports, and paired comparisons;
 - test, coverage, lint, and type-check configuration.
 
-Retriever evaluation, the observability backend, EPSA components, and RAG pipelines are
+The observability backend, EPSA components, and RAG pipelines are
 intentionally not implemented yet.
 
 ## Development setup (PowerShell)
@@ -82,6 +84,51 @@ epsa-retrieve "Operation Cold Comfort was a failed raid by which special forces 
 
 Index binaries and ID mappings are ignored by Git. Their small checksummed manifests remain
 trackable.
+
+## Evaluate the Phase 4 retriever
+
+Refresh the editable installation to register the new command, then commit the implementation
+before creating a research run. Hybrid evaluation requires `OPENAI_API_KEY` in the current process
+and reuses the existing corpus indexes; it makes a query embedding request for each question.
+The command does not automatically load `.env`.
+
+```powershell
+python -m pip install -e ".[dev]"
+epsa-evaluate-retriever run --run-id retriever-hybrid-v1-eval-01
+```
+
+The default benchmark evaluates all 1,000 frozen questions against the global corpus. Relevance
+requires the exact supporting chunk ID. Metrics include Recall/MRR/nDCG at 1, 5, and 10, top-1
+hit rate, both-document coverage, and missing evidence. Recall measures the fraction of gold
+paragraphs found: retrieving one of two supporting paragraphs gives 0.5 recall.
+
+Each aggregate includes its question denominator. Failed requests stop the run, remain visible,
+and receive zero retrieval credit; unattempted questions are reported separately. p50/p95 latency
+includes query embedding and retrieval. Throughput is measured during serial execution.
+
+For an offline BM25 development diagnostic while changes remain uncommitted:
+
+```powershell
+python -m epsa_rag.evaluation.retrieval.cli run --run-id retriever-bm25-v1-dev-01 --mode bm25 --allow-dirty-dev-run
+```
+
+Use `--mode dense` for a dense-only ablation, `--question-limit 10` for an explicit smoke-test
+subset, and `--help` for timing and fusion options. Development and subset runs are marked in
+their metadata. Each run ID is immutable and must be unique.
+
+```powershell
+epsa-evaluate-retriever inspect data/exports/retrieval/retriever-hybrid-v1-eval-01 --failures
+epsa-evaluate-retriever inspect data/exports/retrieval/retriever-hybrid-v1-eval-01 --question-id QUESTION_ID
+epsa-evaluate-retriever compare data/exports/retrieval/RUN_A data/exports/retrieval/RUN_B --metric recall@10
+```
+
+The ignored `data/exports/retrieval/{run_id}/` directory contains `run.json`, `events.jsonl`, and
+a checksum manifest. Traces retain canonical rankings, branch scores/ranks, gold references, and
+missing supporting chunk IDs. Paired comparisons list improved/regressed/unchanged questions.
+
+These are Phase 4 diagnostic exports. PostgreSQL remains the planned authoritative experiment
+store in Phase 5. A full hybrid benchmark and failure review are required before accepting
+retriever quality; passing software tests alone does not establish retrieval accuracy.
 
 Repository-wide development and research rules are defined in `AGENTS.md` and the current
 documents under `docs/architecture/`.

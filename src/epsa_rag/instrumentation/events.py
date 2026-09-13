@@ -14,7 +14,9 @@ from epsa_rag.instrumentation.context import TraceContext
 class InstrumentationEvent(BaseModel):
     """A storage-neutral diagnostic event emitted by research code."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+    # Identifier fields normalize themselves. Payload strings must retain exact source text,
+    # including the native whitespace in HotPotQA sentences and complete queries.
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     event_id: Identifier = Field(default_factory=lambda: f"event:{uuid4().hex}")
     occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -39,4 +41,3 @@ class InstrumentationEvent(BaseModel):
         """Detach the event's top-level payload mapping from caller-owned state."""
 
         return value.copy()
-

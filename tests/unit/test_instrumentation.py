@@ -34,6 +34,28 @@ def test_event_round_trips_with_trace_context() -> None:
     assert restored.context.question_id == "q-1"
 
 
+def test_event_preserves_nested_source_whitespace_and_normalizes_only_identifiers() -> None:
+    payload = {
+        "question": "  Original question?\n",
+        "sentences": [
+            {"text": "First sentence. "},
+            {"text": " Second sentence.\n"},
+        ],
+    }
+    event = InstrumentationEvent(
+        event_id=" event:whitespace ",
+        context=TraceContext.start(run_id="test"),
+        event_type=" source.preserved ",
+        source=" tests ",
+        payload=payload,
+    )
+    assert event.event_id == "event:whitespace"
+    assert event.event_type == "source.preserved"
+    assert event.source == "tests"
+    assert event.payload == payload
+    assert InstrumentationEvent.model_validate_json(event.model_dump_json()).payload == payload
+
+
 def test_event_requires_timezone_aware_timestamp() -> None:
     with pytest.raises(ValidationError, match="timezone-aware"):
         InstrumentationEvent(
@@ -74,4 +96,3 @@ def test_no_op_sink_satisfies_protocol_and_discards_event() -> None:
 
     assert isinstance(sink, InstrumentationSink)
     assert sink.emit(make_event()) is None
-
