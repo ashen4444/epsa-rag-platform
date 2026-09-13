@@ -1,0 +1,35 @@
+# Python bytecode and build products
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.egg-info/
+
+# Virtual environments and local secrets
+.venv/
+.env
+.env.*
+!.env.example
+
+# Test, coverage, lint, and type-check caches
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local development instructions and design references
+/AGENTS.md
+/docs/
+
+# Future local research artifacts (manifests remain tracked when introduced)
+data/raw/
+data/indexes/
+data/exports/
