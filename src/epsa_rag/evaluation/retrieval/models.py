@@ -21,7 +21,7 @@ FiniteNonNegative = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 class EvaluationConfig(ConfigModel):
     """Persisted choices for one serial, live-query benchmark."""
 
-    evaluator_version: Literal["retrieval-evaluation-v1"] = "retrieval-evaluation-v1"
+    evaluator_version: Literal["retrieval-evaluation-v2"] = "retrieval-evaluation-v2"
     relevance: Literal["exact_chunk"] = "exact_chunk"
     mode: Literal["hybrid", "bm25", "dense"] = "hybrid"
     cutoffs: tuple[int, ...] = (1, 5, 10)

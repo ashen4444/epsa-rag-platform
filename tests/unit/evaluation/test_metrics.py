@@ -44,7 +44,7 @@ def test_duplicates_cannot_inflate_metrics_or_shift_later_ranks() -> None:
     assert scores["ndcg@3"] == pytest.approx(1.5 / (1 + 1 / math.log2(3)))
 
 
-def test_macro_averages_and_conditional_both_denominator() -> None:
+def test_macro_averages_record_the_conditional_both_documents_denominator() -> None:
     rows = [
         retrieval_metrics(["a"], frozenset({"a"}), (10,)),
         retrieval_metrics(["a"], frozenset({"a", "b"}), (10,)),
@@ -53,6 +53,7 @@ def test_macro_averages_and_conditional_both_denominator() -> None:
     assert scores["recall@10"] == 0.75
     assert counts["recall@10"] == 2
     assert counts["both_supporting_documents_found@10"] == 1
+    assert not any(name.startswith("all_supporting_documents_found") for name in scores)
     assert mean_metrics([]) == ({}, {})
 
 

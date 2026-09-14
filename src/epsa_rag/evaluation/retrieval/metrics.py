@@ -36,12 +36,12 @@ def retrieval_metrics(
                 f"recall@{k}": recall,
                 f"mrr@{k}": 0.0 if first is None else 1 / first,
                 f"ndcg@{k}": dcg / ideal,
-                f"all_supporting_documents_found@{k}": float(hits == len(gold)),
                 f"missing_gold_document_rate@{k}": 1 - recall,
                 f"any_gold_missing@{k}": float(hits < len(gold)),
             }
         )
-        # This metric has a conditional denominator: questions with exactly two gold documents.
+        # HotPotQA's headline multi-hop completeness metric. Keep its denominator explicit
+        # because a future benchmark may not require exactly two supporting paragraphs.
         if len(gold) == 2:
             scores[f"both_supporting_documents_found@{k}"] = float(hits == 2)
     return scores

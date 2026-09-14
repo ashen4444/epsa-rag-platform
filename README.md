@@ -99,7 +99,7 @@ epsa-evaluate-retriever run --run-id retriever-hybrid-v1-eval-01
 
 The default benchmark evaluates all 1,000 frozen questions against the global corpus. Relevance
 requires the exact supporting chunk ID. Metrics include Recall/MRR/nDCG at 1, 5, and 10, top-1
-hit rate, both-document coverage, and missing evidence. Recall measures the fraction of gold
+hit rate, both-supporting-paragraph coverage, and missing evidence. Recall measures the fraction of gold
 paragraphs found: retrieving one of two supporting paragraphs gives 0.5 recall.
 
 Each aggregate includes its question denominator. Failed requests stop the run, remain visible,

@@ -95,6 +95,7 @@ def test_same_title_different_chunk_gets_no_credit(evaluation_data, evaluation_m
         sink=InMemoryInstrumentationSink(),
     )
     assert summary.metrics["recall@10"] == 0.5
+    assert summary.metrics["any_gold_missing@10"] == 1
     assert summary.metrics["both_supporting_documents_found@10"] == 0
 
 
