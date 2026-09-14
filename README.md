@@ -87,24 +87,33 @@ trackable.
 
 ## Evaluate the Phase 4 retriever
 
-Refresh the editable installation to register the new command, then commit the implementation
-before creating a research run. Hybrid evaluation requires `OPENAI_API_KEY` in the current process
-and reuses the existing corpus indexes; it makes a query embedding request for each question.
-The command does not automatically load `.env`.
+Refresh the editable installation, then commit the implementation before creating a research
+artifact. The command does not automatically load `.env`.
 
 ```powershell
 python -m pip install -e ".[dev]"
-epsa-evaluate-retriever run --run-id retriever-hybrid-v1-eval-01
+epsa-evaluate-retriever cache-queries
+epsa-evaluate-retriever run --run-id retriever-hybrid-v1-eval-02 --query-embedding-cache read-only
 ```
 
+`cache-queries` requires `OPENAI_API_KEY` and batches the exact 1,000 frozen questions once. It
+publishes immutable, checksummed float32 vectors under the ignored `data/cache/` directory. A
+read-only research run validates the complete frozen collection before creating its export and
+never initializes an OpenAI client. Use `--query-embedding-cache disabled` for a live end-to-end
+latency run. `read-write` reuses hits and embeds/stores misses, which supports future dynamic Hop-2
+queries without putting EPSA logic into the retriever.
+
 The default benchmark evaluates all 1,000 frozen questions against the global corpus. Relevance
-requires the exact supporting chunk ID. Metrics include Recall/MRR/nDCG at 1, 5, and 10, top-1
-hit rate, both-supporting-paragraph coverage, and missing evidence. Recall measures the fraction of gold
-paragraphs found: retrieving one of two supporting paragraphs gives 0.5 recall.
+requires the exact supporting chunk ID. The headline quality results are Recall@5, Recall@10,
+both supporting paragraphs found@10, MRR@10, nDCG@10, and top-1 supporting-document hit rate.
+Additional cutoffs and missing-evidence measures remain available for diagnosis. Recall measures
+the fraction of gold paragraphs found: retrieving one of two supporting paragraphs gives 0.5.
 
 Each aggregate includes its question denominator. Failed requests stop the run, remain visible,
-and receive zero retrieval credit; unattempted questions are reported separately. p50/p95 latency
-includes query embedding and retrieval. Throughput is measured during serial execution.
+and receive zero retrieval credit; unattempted questions are reported separately. End-to-end
+p50/p95 includes the configured live embedding or cache lookup. Retrieval-core p50/p95 subtracts
+that embedding boundary and measures BM25, FAISS, fusion, and canonical result construction.
+Throughput is measured during serial execution, with a separate retrieval-core value.
 
 For an offline BM25 development diagnostic while changes remain uncommitted:
 

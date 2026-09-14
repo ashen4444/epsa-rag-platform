@@ -115,11 +115,16 @@ def load_export(directory: Path) -> tuple[RunSummary, tuple[QuestionTrace, ...]]
         event.context.run_id != manifest.run_id for event in events
     ):
         raise SourceValidationError("export run identity mismatch")
+    try:
+        started_metadata = RunMetadata.model_validate(events[0].payload)
+        finished_summary = RunSummary.model_validate(events[-1].payload)
+    except ValueError as error:
+        raise SourceValidationError("export lifecycle payload is invalid") from error
     if (
         events[0].event_type != "evaluation.run.started"
-        or events[0].payload != summary.metadata.model_dump(mode="json")
+        or started_metadata != summary.metadata
         or events[-1].event_type != "evaluation.run.finished"
-        or events[-1].payload != summary.model_dump(mode="json")
+        or finished_summary != summary
     ):
         raise SourceValidationError("export lifecycle does not match summary")
     traces = tuple(

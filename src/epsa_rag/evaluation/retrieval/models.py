@@ -12,6 +12,10 @@ from epsa_rag.core.ids import Identifier
 from epsa_rag.core.models import ContractModel
 from epsa_rag.data.models import QuestionInput, SupportingFactLabel
 from epsa_rag.retrieval.config import HybridRetrieverConfig
+from epsa_rag.retrieval.dense.query_cache import (
+    QueryEmbeddingCollectionManifest,
+    QueryEmbeddingObservation,
+)
 from epsa_rag.retrieval.manifests import RetrievalIndexManifest
 from epsa_rag.retrieval.models import RetrievalResult
 
@@ -19,9 +23,13 @@ FiniteNonNegative = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 
 
 class EvaluationConfig(ConfigModel):
-    """Persisted choices for one serial, live-query benchmark."""
+    """Persisted choices for one serial retrieval benchmark."""
 
-    evaluator_version: Literal["retrieval-evaluation-v2"] = "retrieval-evaluation-v2"
+    evaluator_version: Literal[
+        "retrieval-evaluation-v1",
+        "retrieval-evaluation-v2",
+        "retrieval-evaluation-v3",
+    ] = "retrieval-evaluation-v3"
     relevance: Literal["exact_chunk"] = "exact_chunk"
     mode: Literal["hybrid", "bm25", "dense"] = "hybrid"
     cutoffs: tuple[int, ...] = (1, 5, 10)
@@ -29,7 +37,8 @@ class EvaluationConfig(ConfigModel):
     warmup_questions: int = Field(default=0, ge=0)
     question_limit: int | None = Field(default=None, ge=1)
     concurrency: Literal[1] = 1
-    query_embedding_cache: Literal["disabled"] = "disabled"
+    query_embedding_cache: Literal["disabled", "read-only", "read-write"] = "disabled"
+    query_embedding_cache_version: Identifier = "query-embeddings-openai-small-v1"
     openai_timeout_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
     openai_max_retries: int = Field(default=2, ge=0)
     faiss_threads: int = Field(default=1, ge=1)
@@ -41,6 +50,8 @@ class EvaluationConfig(ConfigModel):
             raise ValueError("cutoffs must be sorted, unique, and nonempty")
         if self.cutoffs[0] < 1 or self.cutoffs[-1] > self.retriever.fusion.result_k:
             raise ValueError("cutoffs must be positive and fit within retrieval result_k")
+        if self.mode == "bm25" and self.query_embedding_cache != "disabled":
+            raise ValueError("BM25-only evaluation cannot use a query embedding cache")
         return self
 
 
@@ -65,6 +76,7 @@ class RunMetadata(ContractModel):
     full_dataset_question_count: int = Field(ge=1)
     configuration: EvaluationConfig
     configuration_fingerprint: str
+    query_embedding_collection: QueryEmbeddingCollectionManifest | None = None
 
 
 class QuestionTrace(ContractModel):
@@ -79,7 +91,9 @@ class QuestionTrace(ContractModel):
     status: Literal["completed", "failed"]
     error_type: str | None = None
     retrieval: RetrievalResult | None = None
+    query_embedding: QueryEmbeddingObservation | None = None
     latency_ms: FiniteNonNegative
+    retrieval_core_latency_ms: FiniteNonNegative | None = None
     metrics: dict[str, float]
 
 
@@ -103,10 +117,14 @@ class RunSummary(ContractModel):
     latency_p95_ms: FiniteNonNegative | None
     successful_latency_p50_ms: FiniteNonNegative | None
     successful_latency_p95_ms: FiniteNonNegative | None
+    retrieval_core_latency_p50_ms: FiniteNonNegative | None = None
+    retrieval_core_latency_p95_ms: FiniteNonNegative | None = None
     retrieval_seconds: FiniteNonNegative
+    retrieval_core_seconds: FiniteNonNegative = 0.0
     evaluation_wall_seconds: FiniteNonNegative
     throughput_questions_per_second: FiniteNonNegative | None
     retrieval_throughput_questions_per_second: FiniteNonNegative | None
+    retrieval_core_throughput_questions_per_second: FiniteNonNegative | None = None
 
 
 def utc_now() -> datetime:

@@ -7,6 +7,11 @@ from epsa_rag.core.models import RankedParagraphChunk, RetrievalQuery
 from epsa_rag.evaluation.retrieval.evaluator import evaluate
 from epsa_rag.evaluation.retrieval.models import QuestionTrace
 from epsa_rag.instrumentation.sinks import InMemoryInstrumentationSink
+from epsa_rag.retrieval.dense.query_cache import (
+    QueryEmbeddingObservation,
+    QueryEmbeddingObservationBuffer,
+    query_text_sha256,
+)
 from epsa_rag.retrieval.models import RetrievalResult
 
 
@@ -97,6 +102,49 @@ def test_same_title_different_chunk_gets_no_credit(evaluation_data, evaluation_m
     assert summary.metrics["recall@10"] == 0.5
     assert summary.metrics["any_gold_missing@10"] == 1
     assert summary.metrics["both_supporting_documents_found@10"] == 0
+
+
+def test_query_embedding_observations_produce_separate_core_latency(
+    evaluation_data, evaluation_metadata
+):
+    corpus, benchmark, _ = evaluation_data
+    buffer = QueryEmbeddingObservationBuffer()
+    for example, latency in zip(benchmark.examples, (50.0, 100.0, 150.0), strict=True):
+        query = RetrievalQuery(
+            text=example.inference.text,
+            question_id=example.inference.question_id,
+        )
+        buffer.record(
+            QueryEmbeddingObservation(
+                cache_mode="read-only",
+                source="cache",
+                cache_version="cache-v1",
+                cache_key="a" * 64,
+                query_text_sha256=query_text_sha256(query),
+                model="text-embedding-3-small",
+                dimensions=1536,
+                vector_sha256="b" * 64,
+                cache_entry="cache-v1/entries/aa/key",
+                latency_ms=latency,
+            )
+        )
+    ticks = iter([0, 0.1, 0.2, 0.3, 0.5, 0.6, 0.9, 1.0])
+
+    summary = evaluate(
+        examples=benchmark.examples,
+        corpus=corpus,
+        retriever=FixtureRetriever(corpus, benchmark.examples),
+        metadata=evaluation_metadata,
+        sink=InMemoryInstrumentationSink(),
+        clock=lambda: next(ticks),
+        embedding_observations=buffer,
+    )
+
+    assert summary.latency_p50_ms == pytest.approx(200)
+    assert summary.retrieval_core_latency_p50_ms == pytest.approx(100)
+    assert summary.retrieval_core_latency_p95_ms == pytest.approx(145)
+    assert summary.retrieval_core_seconds == pytest.approx(0.3)
+    assert summary.retrieval_core_throughput_questions_per_second == pytest.approx(10)
 
 
 @pytest.mark.parametrize("invalid", ["query", "rank", "duplicate", "too_many", "chunk"])

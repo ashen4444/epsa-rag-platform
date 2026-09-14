@@ -53,7 +53,12 @@ class OpenAIEmbeddingProvider:
     def embed_query(self, query: RetrievalQuery) -> FloatVector:
         """Embed the unmodified complete query text."""
 
-        return cast(FloatVector, self._embed_texts([query.text])[0].copy())
+        return cast(FloatVector, self.embed_queries((query,))[0].copy())
+
+    def embed_queries(self, queries: Sequence[RetrievalQuery]) -> FloatMatrix:
+        """Batch exact query texts while preserving their supplied order."""
+
+        return self._embed_texts([query.text for query in queries])
 
     def _embed_texts(self, texts: Sequence[str]) -> FloatMatrix:
         if not texts:

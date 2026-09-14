@@ -12,7 +12,12 @@ from openai import OpenAIError
 from epsa_rag.core.exceptions import EpsaRagError
 from epsa_rag.evaluation.retrieval.exports import compare_exports, load_export
 from epsa_rag.evaluation.retrieval.models import EvaluationConfig
-from epsa_rag.evaluation.retrieval.pipeline import configuration_from_indexes, run_benchmark
+from epsa_rag.evaluation.retrieval.pipeline import (
+    DEFAULT_QUERY_CACHE_ROOT,
+    build_benchmark_query_cache,
+    configuration_from_indexes,
+    run_benchmark,
+)
 from epsa_rag.retrieval.config import RRFConfig
 from epsa_rag.retrieval.pipeline import DEFAULT_CORPUS_DIRECTORY, DEFAULT_INDEX_ROOT
 
@@ -42,7 +47,34 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--openai-timeout-seconds", type=float, default=60)
     run.add_argument("--openai-max-retries", type=int, default=2)
     run.add_argument("--faiss-threads", type=int, default=1)
+    run.add_argument(
+        "--query-embedding-cache",
+        choices=("disabled", "read-only", "read-write"),
+        default="disabled",
+    )
+    run.add_argument(
+        "--query-embedding-cache-version",
+        default="query-embeddings-openai-small-v1",
+    )
+    run.add_argument("--query-cache-root", type=Path, default=DEFAULT_QUERY_CACHE_ROOT)
     run.add_argument("--allow-dirty-dev-run", action="store_true")
+    cache = commands.add_parser(
+        "cache-queries", help="Build the immutable embedding cache for the frozen benchmark"
+    )
+    cache.add_argument(
+        "--dataset-directory", type=Path, default=Path("data/datasets/hotpotqa_1000_v1")
+    )
+    cache.add_argument("--corpus-directory", type=Path, default=DEFAULT_CORPUS_DIRECTORY)
+    cache.add_argument("--index-root", type=Path, default=DEFAULT_INDEX_ROOT)
+    cache.add_argument("--repository-root", type=Path, default=Path.cwd())
+    cache.add_argument("--query-cache-root", type=Path, default=DEFAULT_QUERY_CACHE_ROOT)
+    cache.add_argument(
+        "--query-embedding-cache-version",
+        default="query-embeddings-openai-small-v1",
+    )
+    cache.add_argument("--dense-index-version", default="dense-openai-small-faiss-flatip-v1")
+    cache.add_argument("--openai-timeout-seconds", type=float, default=60)
+    cache.add_argument("--openai-max-retries", type=int, default=2)
     inspect = commands.add_parser("inspect", help="Inspect a run, failures, or one question")
     inspect.add_argument("directory", type=Path)
     selection = inspect.add_mutually_exclusive_group()
@@ -59,6 +91,38 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
     try:
+        if args.command == "cache-queries":
+            manifest = build_benchmark_query_cache(
+                dataset_directory=args.dataset_directory,
+                corpus_directory=args.corpus_directory,
+                index_root=args.index_root,
+                repository_root=args.repository_root,
+                query_cache_root=args.query_cache_root,
+                cache_version=args.query_embedding_cache_version,
+                dense_index_version=args.dense_index_version,
+                openai_timeout_seconds=args.openai_timeout_seconds,
+                openai_max_retries=args.openai_max_retries,
+            )
+            print(
+                json.dumps(
+                    {
+                        "cache_version": manifest.cache_version,
+                        "dataset_version": manifest.dataset_version,
+                        "question_count": manifest.question_count,
+                        "model": manifest.model,
+                        "dimensions": manifest.dimensions,
+                        "collection_manifest": str(
+                            args.query_cache_root
+                            / manifest.cache_version
+                            / "collections"
+                            / manifest.dataset_version
+                            / "manifest.json"
+                        ),
+                    },
+                    indent=2,
+                )
+            )
+            return 0
         if args.command == "compare":
             print(
                 json.dumps(compare_exports(args.before, args.after, metric=args.metric), indent=2)
@@ -117,6 +181,8 @@ def main() -> int:
             openai_timeout_seconds=args.openai_timeout_seconds,
             openai_max_retries=args.openai_max_retries,
             faiss_threads=args.faiss_threads,
+            query_embedding_cache=args.query_embedding_cache,
+            query_embedding_cache_version=args.query_embedding_cache_version,
         )
         summary = run_benchmark(
             run_id=args.run_id,
@@ -127,6 +193,7 @@ def main() -> int:
             repository_root=args.repository_root,
             config=config,
             allow_dirty=args.allow_dirty_dev_run,
+            query_cache_root=args.query_cache_root,
             progress=lambda done, total: (
                 print(f"Evaluated {done}/{total}", file=sys.stderr)
                 if done % 25 == 0 or done == total
@@ -144,7 +211,12 @@ def main() -> int:
                     "metrics": summary.metrics,
                     "latency_p50_ms": summary.latency_p50_ms,
                     "latency_p95_ms": summary.latency_p95_ms,
+                    "retrieval_core_latency_p50_ms": summary.retrieval_core_latency_p50_ms,
+                    "retrieval_core_latency_p95_ms": summary.retrieval_core_latency_p95_ms,
                     "throughput_questions_per_second": summary.throughput_questions_per_second,
+                    "retrieval_core_throughput_questions_per_second": (
+                        summary.retrieval_core_throughput_questions_per_second
+                    ),
                     "export_directory": str(args.export_root / args.run_id),
                 },
                 indent=2,

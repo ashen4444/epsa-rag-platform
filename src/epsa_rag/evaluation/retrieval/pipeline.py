@@ -19,6 +19,12 @@ from epsa_rag.instrumentation.sinks import InstrumentationSink
 from epsa_rag.retrieval.config import BM25Config, DenseConfig, HybridRetrieverConfig, RRFConfig
 from epsa_rag.retrieval.corpus import FrozenCorpus
 from epsa_rag.retrieval.dense.embeddings import OpenAIEmbeddingProvider
+from epsa_rag.retrieval.dense.query_cache import (
+    CachedQueryEmbeddingProvider,
+    QueryEmbeddingCache,
+    QueryEmbeddingCollectionManifest,
+    QueryEmbeddingObservationBuffer,
+)
 from epsa_rag.retrieval.dense.retriever import DenseRetriever
 from epsa_rag.retrieval.hybrid_retriever import HybridRetriever
 from epsa_rag.retrieval.interfaces import RetrievalBackend
@@ -29,6 +35,8 @@ from epsa_rag.retrieval.persistence import (
     load_dense_index,
     load_index_manifest,
 )
+
+DEFAULT_QUERY_CACHE_ROOT = Path("data/cache/query_embeddings")
 
 
 class SingleBranchRetriever:
@@ -67,6 +75,7 @@ def run_benchmark(
     allow_dirty: bool = False,
     downstream: InstrumentationSink | None = None,
     progress: Callable[[int, int], None] | None = None,
+    query_cache_root: Path = DEFAULT_QUERY_CACHE_ROOT,
 ) -> RunSummary:
     """Validate all inputs before requests and reserve the immutable run before any API call."""
 
@@ -78,6 +87,10 @@ def run_benchmark(
     examples = benchmark.examples[: config.question_limit]
     if config.warmup_questions > len(examples):
         raise ConfigurationError("warmup_questions exceeds the selected question count")
+    all_queries = tuple(
+        RetrievalQuery(text=item.inference.text, question_id=item.inference.question_id)
+        for item in benchmark.examples
+    )
     bm25_directory = index_directory(
         index_root,
         kind="bm25",
@@ -103,6 +116,21 @@ def run_benchmark(
         manifests.append(load_index_manifest(dense_directory))
         if dense_index.config != config.retriever.dense:
             raise ConfigurationError("dense run configuration differs from the frozen index")
+    query_cache = None
+    query_collection = None
+    if dense_index is not None and config.query_embedding_cache != "disabled":
+        query_cache = QueryEmbeddingCache(
+            query_cache_root,
+            config=config.retriever.dense,
+            cache_version=config.query_embedding_cache_version,
+        )
+        if config.query_embedding_cache == "read-only":
+            query_collection = query_cache.load_collection(
+                queries=all_queries,
+                dataset_version=benchmark.manifest.version,
+                dataset_manifest_sha256=benchmark.manifest_sha256,
+                dataset_file_sha256=benchmark.manifest.files[0].sha256,
+            )
     metadata = RunMetadata(
         run_id=run_id,
         git_commit_sha=commit,
@@ -120,21 +148,34 @@ def run_benchmark(
         full_dataset_question_count=len(benchmark.examples),
         configuration=config,
         configuration_fingerprint=config.fingerprint(),
+        query_embedding_collection=query_collection,
     )
     client = None
+    observation_buffer = QueryEmbeddingObservationBuffer() if dense_index is not None else None
     previous_threads = faiss.omp_get_max_threads()
     try:
         faiss.omp_set_num_threads(config.faiss_threads)
         dense = None
         if dense_index is not None:
-            client = OpenAI(
-                timeout=config.openai_timeout_seconds,
-                max_retries=config.openai_max_retries,
-                base_url="https://api.openai.com/v1",
+            live_provider = None
+            if config.query_embedding_cache != "read-only":
+                client = OpenAI(
+                    timeout=config.openai_timeout_seconds,
+                    max_retries=config.openai_max_retries,
+                    base_url="https://api.openai.com/v1",
+                )
+                live_provider = OpenAIEmbeddingProvider(
+                    config.retriever.dense,
+                    client=client,
+                )
+            embedding_provider = CachedQueryEmbeddingProvider(
+                config=config.retriever.dense,
+                mode=config.query_embedding_cache,
+                cache=query_cache,
+                delegate=live_provider,
+                observer=observation_buffer.record if observation_buffer is not None else None,
             )
-            dense = DenseRetriever(
-                dense_index, OpenAIEmbeddingProvider(config.retriever.dense, client=client)
-            )
+            dense = DenseRetriever(dense_index, embedding_provider)
         retriever: CanonicalRetriever
         if bm25 is not None and dense is not None:
             retriever = HybridRetriever(
@@ -154,6 +195,7 @@ def run_benchmark(
                 metadata=metadata,
                 sink=sink,
                 progress=progress,
+                embedding_observations=observation_buffer,
             )
             sink.finalize(summary)
         # Prove persisted traces round-trip before reporting successful completion to the CLI.
@@ -163,6 +205,66 @@ def run_benchmark(
         faiss.omp_set_num_threads(previous_threads)
         if client is not None:
             client.close()
+
+
+def build_benchmark_query_cache(
+    *,
+    dataset_directory: Path,
+    corpus_directory: Path,
+    index_root: Path,
+    repository_root: Path,
+    query_cache_root: Path,
+    cache_version: str,
+    dense_index_version: str,
+    openai_timeout_seconds: float = 60,
+    openai_max_retries: int = 2,
+) -> QueryEmbeddingCollectionManifest:
+    """Build one immutable cache collection for the complete frozen benchmark."""
+
+    commit, _, _ = code_provenance(repository_root, allow_dirty=False)
+    corpus = FrozenCorpus.load(corpus_directory)
+    benchmark = FrozenBenchmark.load(dataset_directory, corpus)
+    dense_directory = index_directory(
+        index_root,
+        kind="dense",
+        corpus_version=corpus.manifest.version,
+        index_version=dense_index_version,
+    )
+    dense_index = load_dense_index(dense_directory, corpus=corpus)
+    cache = QueryEmbeddingCache(
+        query_cache_root,
+        config=dense_index.config,
+        cache_version=cache_version,
+    )
+    queries = tuple(
+        RetrievalQuery(text=item.inference.text, question_id=item.inference.question_id)
+        for item in benchmark.examples
+    )
+    manifest_path = cache.collection_manifest_path(benchmark.manifest.version)
+    if manifest_path.exists():
+        return cache.load_collection(
+            queries=queries,
+            dataset_version=benchmark.manifest.version,
+            dataset_manifest_sha256=benchmark.manifest_sha256,
+            dataset_file_sha256=benchmark.manifest.files[0].sha256,
+        )
+    client = OpenAI(
+        timeout=openai_timeout_seconds,
+        max_retries=openai_max_retries,
+        base_url="https://api.openai.com/v1",
+    )
+    try:
+        provider = OpenAIEmbeddingProvider(dense_index.config, client=client)
+        return cache.build_collection(
+            queries=queries,
+            dataset_version=benchmark.manifest.version,
+            dataset_manifest_sha256=benchmark.manifest_sha256,
+            dataset_file_sha256=benchmark.manifest.files[0].sha256,
+            git_commit_sha=commit,
+            provider=provider,
+        )
+    finally:
+        client.close()
 
 
 def configuration_from_indexes(

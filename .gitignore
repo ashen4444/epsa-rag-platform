@@ -32,6 +32,7 @@ Thumbs.db
 # Future local research artifacts (manifests remain tracked when introduced)
 data/raw/
 data/exports/
+data/cache/
 /data/datasets/*/*.jsonl
 /data/corpus/*/*.jsonl
 /data/indexes/.epsa-phase3-*/

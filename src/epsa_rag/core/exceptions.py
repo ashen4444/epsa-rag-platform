@@ -39,3 +39,7 @@ class IndexIntegrityError(RetrievalError):
 
 class EmbeddingError(RetrievalError):
     """Raised when an embedding provider violates the project contract."""
+
+
+class QueryEmbeddingCacheError(EmbeddingError):
+    """Raised when a query-embedding cache entry is missing or fails integrity checks."""

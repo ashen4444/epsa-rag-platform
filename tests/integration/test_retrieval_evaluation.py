@@ -7,7 +7,12 @@ from unittest.mock import MagicMock
 import pytest
 from openai import OpenAIError
 
-from epsa_rag.core.exceptions import ConfigurationError, FrozenArtifactError, SourceValidationError
+from epsa_rag.core.exceptions import (
+    ConfigurationError,
+    FrozenArtifactError,
+    QueryEmbeddingCacheError,
+    SourceValidationError,
+)
 from epsa_rag.evaluation.retrieval import cli, pipeline
 from epsa_rag.evaluation.retrieval.exports import compare_exports, load_export
 from epsa_rag.evaluation.retrieval.models import EvaluationConfig
@@ -65,6 +70,57 @@ def test_subset_and_warmup_are_explicit(evaluation_runner):
     assert not summary.full_benchmark
     assert summary.completed_questions == summary.warmup_completed == 1
     assert len(summary.metadata.question_ids) == 1
+
+
+def test_build_frozen_query_cache_then_evaluate_read_only(
+    evaluation_runner, evaluation_embeddings, monkeypatch, tmp_path
+):
+    cache_root = tmp_path / "query-cache"
+    manifest = pipeline.build_benchmark_query_cache(
+        dataset_directory=evaluation_runner["dataset_directory"],
+        corpus_directory=evaluation_runner["corpus_directory"],
+        index_root=evaluation_runner["index_root"],
+        repository_root=evaluation_runner["repository_root"],
+        query_cache_root=cache_root,
+        cache_version="test-cache-v1",
+        dense_index_version="dense-openai-small-faiss-flatip-v1",
+    )
+    assert manifest.question_count == 3
+    monkeypatch.setattr(
+        pipeline,
+        "OpenAI",
+        MagicMock(side_effect=AssertionError("read-only mode must not initialize OpenAI")),
+    )
+    summary = pipeline.run_benchmark(
+        run_id="cached",
+        config=EvaluationConfig(
+            mode="hybrid",
+            query_embedding_cache="read-only",
+            query_embedding_cache_version="test-cache-v1",
+        ),
+        query_cache_root=cache_root,
+        **evaluation_runner,
+    )
+    _, traces = load_export(evaluation_runner["export_root"] / "cached")
+    assert summary.metadata.query_embedding_collection == manifest
+    assert all(trace.query_embedding is not None for trace in traces)
+    assert all(trace.query_embedding.source == "cache" for trace in traces if trace.query_embedding)
+    assert summary.retrieval_core_latency_p50_ms is not None
+
+
+def test_read_only_cache_is_preflighted_before_export_creation(evaluation_runner, tmp_path):
+    with pytest.raises(QueryEmbeddingCacheError, match="frozen query collection"):
+        pipeline.run_benchmark(
+            run_id="missing-cache",
+            config=EvaluationConfig(
+                mode="dense",
+                query_embedding_cache="read-only",
+                query_embedding_cache_version="missing-cache-v1",
+            ),
+            query_cache_root=tmp_path / "missing",
+            **evaluation_runner,
+        )
+    assert not (evaluation_runner["export_root"] / "missing-cache").exists()
 
 
 @pytest.mark.parametrize("change", [{"question_limit": 4}, {"warmup_questions": 4}])
@@ -165,6 +221,29 @@ def test_cli_run_inspect_failures_question_and_compare(evaluation_runner, monkey
     )
     with pytest.raises(SystemExit):
         cli.main()
+
+
+def test_cli_builds_frozen_query_cache(evaluation_runner, monkeypatch, capsys, tmp_path):
+    cache_root = tmp_path / "cli-query-cache"
+    args = ["epsa-evaluate-retriever", "cache-queries"]
+    for key in ("dataset_directory", "corpus_directory", "index_root", "repository_root"):
+        args.extend(["--" + key.replace("_", "-"), str(evaluation_runner[key])])
+    args.extend(
+        [
+            "--query-cache-root",
+            str(cache_root),
+            "--query-embedding-cache-version",
+            "cli-cache-v1",
+        ]
+    )
+    monkeypatch.setattr(sys, "argv", args)
+
+    assert cli.main() == 0
+
+    result = json.loads(capsys.readouterr().out)
+    assert result["question_count"] == 3
+    assert result["cache_version"] == "cli-cache-v1"
+    assert (cache_root / "cli-cache-v1" / "collections" / "eval-dataset-v1").is_dir()
 
 
 def test_cli_missing_key_and_failed_run(evaluation_runner, monkeypatch, capsys):

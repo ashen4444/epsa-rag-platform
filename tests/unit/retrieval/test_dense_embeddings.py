@@ -73,6 +73,17 @@ def test_document_and_query_embedding_inputs_obey_locked_boundary() -> None:
     assert resource.calls[1]["input"] == ["  Original question?  "]
 
 
+def test_query_embedding_batch_preserves_exact_input_order() -> None:
+    resource = FakeEmbeddingsResource()
+    adapter = provider(resource)
+    queries = (RetrievalQuery(text=" First? "), RetrievalQuery(text="Second?"))
+
+    vectors = adapter.embed_queries(queries)
+
+    assert vectors.shape == (2, 1536)
+    assert resource.calls[0]["input"] == [" First? ", "Second?"]
+
+
 def test_embedding_adapter_batches_and_restores_response_order() -> None:
     resource = FakeEmbeddingsResource()
     progress: list[tuple[int, int]] = []

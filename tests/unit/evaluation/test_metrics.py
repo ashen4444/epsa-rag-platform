@@ -99,6 +99,7 @@ def test_invalid_latency_inputs(values: list[float], fraction: float) -> None:
         {"relevance": "title"},
         {"question_limit": 0},
         {"openai_timeout_seconds": float("inf")},
+        {"mode": "bm25", "query_embedding_cache": "read-only"},
     ],
 )
 def test_invalid_config(change: dict) -> None:

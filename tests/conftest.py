@@ -35,6 +35,9 @@ class EvaluationEmbeddings:
         vector[0] = 1
         return vector
 
+    def embed_queries(self, queries: Sequence[RetrievalQuery]) -> FloatMatrix:
+        return np.vstack([self.embed_query(query) for query in queries]).astype(np.float32)
+
 
 @pytest.fixture
 def evaluation_embeddings() -> EvaluationEmbeddings:

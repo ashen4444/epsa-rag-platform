@@ -23,6 +23,7 @@ from epsa_rag.instrumentation.context import TraceContext
 from epsa_rag.instrumentation.events import InstrumentationEvent
 from epsa_rag.instrumentation.sinks import InstrumentationSink
 from epsa_rag.retrieval.corpus import FrozenCorpus
+from epsa_rag.retrieval.dense.query_cache import QueryEmbeddingObservationBuffer
 from epsa_rag.retrieval.models import RetrievalResult
 
 
@@ -60,12 +61,14 @@ def evaluate(
     clock: Callable[[], float] = perf_counter,
     wall_clock: Callable[[], datetime] = utc_now,
     progress: Callable[[int, int], None] | None = None,
+    embedding_observations: QueryEmbeddingObservationBuffer | None = None,
 ) -> RunSummary:
     """Fail fast with a structured failed run; never silently drop a failed question.
 
     Warmups are explicit and excluded from timing/quality. Query timing includes the entire
-    retriever call (including live embedding retries), but excludes validation and event writes.
-    Run throughput additionally includes scoring and per-question event delivery.
+    retriever call (including a live embedding or cache lookup), but excludes validation and event
+    writes. Retrieval-core timing subtracts the observed query-embedding boundary. Run throughput
+    additionally includes scoring and per-question event delivery.
     """
 
     config = metadata.configuration
@@ -105,6 +108,8 @@ def evaluate(
                 text=example.inference.text, question_id=example.inference.question_id
             )
             warmup_result = retriever.retrieve(query, top_k=top_k)
+            if embedding_observations is not None:
+                embedding_observations.take(query)
             _validate_result(warmup_result, query, corpus, top_k, expected_version)
             warmup_completed += 1
     except Exception as error:
@@ -124,6 +129,17 @@ def evaluate(
             except Exception as error:
                 question_error = type(error).__name__
             elapsed = clock() - request_start
+            embedding = (
+                embedding_observations.take(query)
+                if embedding_observations is not None
+                else None
+            )
+            elapsed_ms = elapsed * 1000
+            core_latency_ms = (
+                max(0.0, elapsed_ms - embedding.latency_ms)
+                if embedding is not None
+                else elapsed_ms if embedding_observations is None else None
+            )
             if result is not None:
                 try:
                     _validate_result(result, query, corpus, top_k, expected_version)
@@ -147,7 +163,9 @@ def evaluate(
                 status="completed" if question_error is None else "failed",
                 error_type=question_error,
                 retrieval=result,
-                latency_ms=elapsed * 1000,
+                query_embedding=embedding,
+                latency_ms=elapsed_ms,
+                retrieval_core_latency_ms=core_latency_ms,
                 metrics=retrieval_metrics(identities, gold, config.cutoffs),
             )
             traces.append(trace)
@@ -165,7 +183,13 @@ def evaluate(
     metrics, denominators = mean_metrics([trace.metrics for trace in traces])
     latencies = [trace.latency_ms for trace in traces]
     successful = [trace.latency_ms for trace in traces if trace.status == "completed"]
+    core_latencies = [
+        trace.retrieval_core_latency_ms
+        for trace in traces
+        if trace.retrieval_core_latency_ms is not None
+    ]
     retrieval_seconds = sum(latencies) / 1000
+    retrieval_core_seconds = sum(core_latencies) / 1000
     summary = RunSummary(
         metadata=metadata,
         started_at=started_at,
@@ -184,12 +208,20 @@ def evaluate(
         latency_p95_ms=percentile(latencies, 0.95),
         successful_latency_p50_ms=percentile(successful, 0.5),
         successful_latency_p95_ms=percentile(successful, 0.95),
+        retrieval_core_latency_p50_ms=percentile(core_latencies, 0.5),
+        retrieval_core_latency_p95_ms=percentile(core_latencies, 0.95),
         retrieval_seconds=retrieval_seconds,
+        retrieval_core_seconds=retrieval_core_seconds,
         evaluation_wall_seconds=elapsed_wall,
         throughput_questions_per_second=len(successful) / elapsed_wall if elapsed_wall else None,
         retrieval_throughput_questions_per_second=(
             len(successful) / retrieval_seconds if retrieval_seconds else None
         ),
+        retrieval_core_throughput_questions_per_second=(
+            len(successful) / retrieval_core_seconds if retrieval_core_seconds else None
+        ),
     )
+    if embedding_observations is not None:
+        embedding_observations.require_empty()
     emit("evaluation.run.finished", summary.model_dump(mode="json"))
     return summary
