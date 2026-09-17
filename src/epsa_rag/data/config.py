@@ -19,6 +19,10 @@ DEFAULT_DOWNLOAD_URI = (
 DEFAULT_SOURCE_SHA256 = "4e9ecb5c8d3b719f624d66b60f8d56bf227f03914f5f0753d6fa1b359d7104ea"
 
 TRAIN_SOURCE_URI = "https://curtis.ml.cmu.edu/datasets/hotpot/hotpot_train_v1.1.json"
+TRAIN_DOWNLOAD_URI = (
+    "https://huggingface.co/datasets/namlh2004/hotpotqa/resolve/main/"
+    "hotpot_train_v1.json?download=true"
+)
 TRAIN_SOURCE_SHA256 = "26650cf50234ef5fb2e664ed70bbecdfd87815e6bffc257e068efea5cf7cd316"
 
 
@@ -57,7 +61,7 @@ class HardTestPreparationConfig(ConfigModel):
     source_configuration: Literal["distractor"] = "distractor"
     source_split: Literal["train"] = "train"
     source_uri: str = TRAIN_SOURCE_URI
-    download_uri: str = TRAIN_SOURCE_URI
+    download_uri: str = TRAIN_DOWNLOAD_URI
     expected_source_sha256: str = TRAIN_SOURCE_SHA256
 
 

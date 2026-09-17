@@ -1,4 +1,10 @@
-from epsa_rag.data.config import HardTestPreparationConfig, PreparationConfig
+from epsa_rag.data.config import (
+    TRAIN_DOWNLOAD_URI,
+    TRAIN_SOURCE_SHA256,
+    TRAIN_SOURCE_URI,
+    HardTestPreparationConfig,
+    PreparationConfig,
+)
 
 
 def test_legacy_development_configuration_fingerprint_is_stable() -> None:
@@ -18,3 +24,7 @@ def test_hard_test_configuration_records_research_critical_choices() -> None:
     assert config.selection_seed == 42
     assert config.dataset_version == "hotpotqa_hard_10000_test_v1"
     assert config.corpus_version == "hotpotqa_hard_10000_test_corpus_v1"
+    assert config.source_uri == TRAIN_SOURCE_URI
+    assert config.download_uri == TRAIN_DOWNLOAD_URI
+    assert config.download_uri != config.source_uri
+    assert config.expected_source_sha256 == TRAIN_SOURCE_SHA256
