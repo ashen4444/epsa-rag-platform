@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO, cast
@@ -15,7 +15,7 @@ from pydantic import ValidationError
 
 from epsa_rag.core.exceptions import SourceValidationError
 from epsa_rag.core.ids import stable_digest, validate_identifier
-from epsa_rag.data.config import PreparationConfig
+from epsa_rag.data.config import PreparationConfiguration
 from epsa_rag.data.io import sha256_file
 from epsa_rag.data.models import HotPotQASourceExample
 
@@ -28,6 +28,7 @@ class SelectedSource:
 
     examples: tuple[HotPotQASourceExample, ...]
     source_record_count: int
+    eligible_record_count: int
     invalid_unselected_question_ids: tuple[str, ...]
 
 
@@ -102,19 +103,32 @@ def load_source(
 def load_selected_source(
     path: Path,
     *,
-    config: PreparationConfig,
+    config: PreparationConfiguration,
 ) -> SelectedSource:
-    """Audit the whole source and fully validate the deterministically selected records."""
+    """Audit, filter, and deterministically select records without loading the source at once."""
 
     _require_digest(path, config.expected_source_sha256)
-    raw = _load_raw_source(path)
-    question_ids = _validate_source_question_ids(raw)
-    if config.question_count > len(raw):
+    difficulty_filter = getattr(config, "difficulty_filter", None)
+    question_ids: list[str] = []
+    eligible_ids: list[str] = []
+    seen_ids: set[str] = set()
+    for index, value in enumerate(_iter_raw_source(path)):
+        question_id = _validate_source_question_id(value, index=index, seen_ids=seen_ids)
+        question_ids.append(question_id)
+        if difficulty_filter is None or (
+            isinstance(value, dict) and value.get("level") == difficulty_filter
+        ):
+            eligible_ids.append(question_id)
+
+    if not question_ids:
+        raise SourceValidationError("HotPotQA source must contain at least one example")
+    if config.question_count > len(eligible_ids):
         raise SourceValidationError(
-            f"requested {config.question_count} questions from a source containing {len(raw)}"
+            f"requested {config.question_count} questions from {len(eligible_ids)} eligible "
+            f"records in a source containing {len(question_ids)}"
         )
     ranked_ids = sorted(
-        question_ids,
+        eligible_ids,
         key=lambda question_id: (
             stable_digest(str(config.selection_seed), question_id),
             question_id,
@@ -125,7 +139,12 @@ def load_selected_source(
     selected_by_id: dict[str, HotPotQASourceExample] = {}
     invalid_unselected: list[str] = []
 
-    for index, (value, question_id) in enumerate(zip(raw, question_ids, strict=True)):
+    second_pass_count = 0
+    for index, value in enumerate(_iter_raw_source(path)):
+        if index >= len(question_ids):
+            raise SourceValidationError("HotPotQA source changed while it was being read")
+        question_id = question_ids[index]
+        second_pass_count += 1
         try:
             example = HotPotQASourceExample.model_validate(value)
         except ValidationError as error:
@@ -136,14 +155,105 @@ def load_selected_source(
                 ) from error
             invalid_unselected.append(question_id)
             continue
+        if example.question_id != question_id:
+            raise SourceValidationError("HotPotQA source changed while it was being read")
         if question_id in selected_id_set:
+            if difficulty_filter is not None and example.level != difficulty_filter:
+                raise SourceValidationError(
+                    f"selected HotPotQA example {question_id!r} does not satisfy "
+                    f"difficulty filter {difficulty_filter!r}"
+                )
             selected_by_id[question_id] = example
+
+    if second_pass_count != len(question_ids):
+        raise SourceValidationError("HotPotQA source changed while it was being read")
 
     return SelectedSource(
         examples=tuple(selected_by_id[question_id] for question_id in selected_ids),
-        source_record_count=len(raw),
+        source_record_count=len(question_ids),
+        eligible_record_count=len(eligible_ids),
         invalid_unselected_question_ids=tuple(sorted(invalid_unselected)),
     )
+
+
+def _iter_raw_source(path: Path) -> Iterator[Any]:
+    """Stream objects from a top-level JSON array with bounded working memory."""
+
+    decoder = json.JSONDecoder()
+    try:
+        with path.open(encoding="utf-8") as stream:
+            buffer = ""
+            position = 0
+            end_of_file = False
+
+            def read_more() -> None:
+                nonlocal buffer, position, end_of_file
+                buffer = buffer[position:]
+                position = 0
+                block = stream.read(1024 * 1024)
+                if block:
+                    buffer += block
+                else:
+                    end_of_file = True
+
+            def skip_whitespace() -> None:
+                nonlocal position
+                while True:
+                    while position < len(buffer) and buffer[position].isspace():
+                        position += 1
+                    if position < len(buffer) or end_of_file:
+                        return
+                    read_more()
+
+            read_more()
+            skip_whitespace()
+            if position >= len(buffer) or buffer[position] != "[":
+                raise SourceValidationError("HotPotQA source root must be a JSON array")
+            position += 1
+            first = True
+
+            while True:
+                skip_whitespace()
+                if position >= len(buffer):
+                    raise SourceValidationError(
+                        f"unable to load HotPotQA source {path}: truncated JSON"
+                    )
+                if buffer[position] == "]":
+                    position += 1
+                    break
+                if not first:
+                    if buffer[position] != ",":
+                        raise SourceValidationError(
+                            f"unable to load HotPotQA source {path}: expected a comma"
+                        )
+                    position += 1
+                    skip_whitespace()
+
+                while True:
+                    try:
+                        value, end = decoder.raw_decode(buffer, position)
+                    except json.JSONDecodeError as error:
+                        if end_of_file:
+                            raise SourceValidationError(
+                                f"unable to load HotPotQA source {path}: {error}"
+                            ) from error
+                        read_more()
+                        continue
+                    position = end
+                    first = False
+                    yield value
+                    break
+
+            skip_whitespace()
+            while not end_of_file:
+                read_more()
+                skip_whitespace()
+            if position < len(buffer):
+                raise SourceValidationError(
+                    f"unable to load HotPotQA source {path}: content follows the JSON array"
+                )
+    except (OSError, UnicodeError) as error:
+        raise SourceValidationError(f"unable to load HotPotQA source {path}: {error}") from error
 
 
 def _load_raw_source(path: Path) -> list[Any]:
@@ -163,16 +273,27 @@ def _validate_source_question_ids(raw: list[Any]) -> tuple[str, ...]:
     question_ids: list[str] = []
     seen_ids: set[str] = set()
     for index, value in enumerate(raw):
-        if not isinstance(value, dict) or not isinstance(value.get("_id"), str):
-            raise SourceValidationError(f"HotPotQA example at index {index} has no string _id")
-        try:
-            question_id = validate_identifier(value["_id"])
-        except ValueError as error:
-            raise SourceValidationError(
-                f"HotPotQA example at index {index} has an invalid _id"
-            ) from error
-        if question_id in seen_ids:
-            raise SourceValidationError(f"duplicate question id: {question_id}")
-        seen_ids.add(question_id)
-        question_ids.append(question_id)
+        question_ids.append(
+            _validate_source_question_id(value, index=index, seen_ids=seen_ids)
+        )
     return tuple(question_ids)
+
+
+def _validate_source_question_id(
+    value: Any,
+    *,
+    index: int,
+    seen_ids: set[str],
+) -> str:
+    if not isinstance(value, dict) or not isinstance(value.get("_id"), str):
+        raise SourceValidationError(f"HotPotQA example at index {index} has no string _id")
+    try:
+        question_id = validate_identifier(value["_id"])
+    except ValueError as error:
+        raise SourceValidationError(
+            f"HotPotQA example at index {index} has an invalid _id"
+        ) from error
+    if question_id in seen_ids:
+        raise SourceValidationError(f"duplicate question id: {question_id}")
+    seen_ids.add(question_id)
+    return question_id

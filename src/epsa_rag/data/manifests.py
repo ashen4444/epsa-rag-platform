@@ -9,7 +9,7 @@ from pydantic import Field, field_validator
 
 from epsa_rag.core.ids import Identifier
 from epsa_rag.core.models import ContractModel, NonEmptyText
-from epsa_rag.data.config import PreparationConfig
+from epsa_rag.data.config import PreparationConfiguration
 
 
 class ArtifactFile(ContractModel):
@@ -26,7 +26,7 @@ class SourceManifest(ContractModel):
 
     dataset: Literal["HotPotQA"]
     configuration: Literal["distractor"]
-    split: Literal["dev"]
+    split: Literal["dev", "train"]
     uri: NonEmptyText
     retrieved_from_uri: NonEmptyText
     filename: NonEmptyText
@@ -42,7 +42,9 @@ class GenerationManifest(ContractModel):
     """Generator identity independent of future experiment storage."""
 
     generator: Literal["epsa-rag-phase2"] = "epsa-rag-phase2"
-    generator_version: Identifier = "hotpotqa-preparation-v1"
+    generator_version: Literal["hotpotqa-preparation-v1", "hotpotqa-preparation-v2"] = (
+        "hotpotqa-preparation-v1"
+    )
     generated_at: datetime
     configuration_fingerprint: Identifier
 
@@ -59,13 +61,14 @@ class GenerationManifest(ContractModel):
 class DatasetManifest(ContractModel):
     """Complete provenance for the frozen question benchmark."""
 
-    schema_version: Literal["1.0"] = "1.0"
+    schema_version: Literal["1.0", "1.1"] = "1.0"
     artifact_type: Literal["dataset"] = "dataset"
     version: Identifier
     source: SourceManifest
     generation: GenerationManifest
-    configuration: PreparationConfig
+    configuration: PreparationConfiguration
     source_question_count: int = Field(ge=0)
+    eligible_question_count: int | None = Field(default=None, ge=0)
     selected_question_count: int = Field(ge=0)
     question_ids: tuple[Identifier, ...]
     files: tuple[ArtifactFile, ...]
@@ -74,13 +77,13 @@ class DatasetManifest(ContractModel):
 class CorpusManifest(ContractModel):
     """Complete provenance for the frozen global paragraph corpus."""
 
-    schema_version: Literal["1.0"] = "1.0"
+    schema_version: Literal["1.0", "1.1"] = "1.0"
     artifact_type: Literal["corpus"] = "corpus"
     version: Identifier
     source_dataset_version: Identifier
     source: SourceManifest
     generation: GenerationManifest
-    configuration: PreparationConfig
+    configuration: PreparationConfiguration
     candidate_paragraph_count: int = Field(ge=0)
     unique_paragraph_count: int = Field(ge=0)
     duplicate_paragraph_count: int = Field(ge=0)

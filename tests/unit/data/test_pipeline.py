@@ -8,6 +8,7 @@ import pytest
 
 from epsa_rag.core.exceptions import SourceValidationError
 from epsa_rag.data import pipeline
+from epsa_rag.data.config import HardTestPreparationConfig
 
 
 def test_main_downloads_prepares_and_prints_summary(
@@ -31,7 +32,10 @@ def test_main_downloads_prepares_and_prints_summary(
         return SimpleNamespace(
             dataset_directory=output_root / "datasets" / "dataset-v1",
             corpus_directory=output_root / "corpus" / "corpus-v1",
-            dataset_manifest=SimpleNamespace(selected_question_count=3),
+            dataset_manifest=SimpleNamespace(
+                eligible_question_count=3,
+                selected_question_count=3,
+            ),
             corpus_manifest=SimpleNamespace(
                 duplicate_paragraph_count=2,
                 unique_paragraph_count=4,
@@ -79,6 +83,51 @@ def test_main_rejects_a_missing_source_without_download(
         pipeline.main()
 
     assert "pass --download" in capsys.readouterr().err
+
+
+def test_main_resolves_the_hard_test_profile(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    source_path = tmp_path / "train.json"
+    source_path.write_text("[]", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def fake_prepare_benchmark(**kwargs: object) -> SimpleNamespace:
+        captured.update(kwargs)
+        return SimpleNamespace(
+            dataset_directory=tmp_path / "data" / "datasets" / "test-v1",
+            corpus_directory=tmp_path / "data" / "corpus" / "corpus-v1",
+            dataset_manifest=SimpleNamespace(
+                eligible_question_count=15_661,
+                selected_question_count=10_000,
+            ),
+            corpus_manifest=SimpleNamespace(
+                duplicate_paragraph_count=5,
+                unique_paragraph_count=99_000,
+            ),
+        )
+
+    monkeypatch.setattr(pipeline, "prepare_benchmark", fake_prepare_benchmark)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "epsa-prepare-hotpotqa",
+            "--profile",
+            "hard-test",
+            "--source-path",
+            str(source_path),
+        ],
+    )
+
+    assert pipeline.main() == 0
+    config = captured["config"]
+    assert isinstance(config, HardTestPreparationConfig)
+    assert config.question_count == 10_000
+    assert config.difficulty_filter == "hard"
+    assert '"eligible_questions": 15661' in capsys.readouterr().out
 
 
 def test_main_reports_preparation_errors_as_cli_errors(

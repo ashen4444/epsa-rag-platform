@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from epsa_rag.core.exceptions import FrozenArtifactError, SourceValidationError
-from epsa_rag.data.config import PreparationConfig
+from epsa_rag.data.config import HardTestPreparationConfig, PreparationConfig
 from epsa_rag.data.io import canonical_json, read_jsonl, sha256_file
 from epsa_rag.data.manifests import ArtifactFile
 from epsa_rag.data.pipeline import prepare_benchmark
@@ -81,6 +81,41 @@ def test_pipeline_publishes_validated_immutable_artifacts(tmp_path: Path) -> Non
             config=config,
             generated_at=generated_at,
         )
+
+
+def test_pipeline_publishes_a_filtered_hard_test_benchmark(tmp_path: Path) -> None:
+    source_path = tmp_path / "train.json"
+    records = []
+    for index, level in enumerate(("hard", "medium", "hard", "easy", "hard")):
+        records.append(
+            {
+                "_id": f"q{index}",
+                "question": f"Question {index}?",
+                "answer": f"Answer {index}",
+                "type": "bridge",
+                "level": level,
+                "supporting_facts": [[f"Title {index}", 0]],
+                "context": [[f"Title {index}", [f"Sentence {index}."]]],
+            }
+        )
+    source_path.write_text(json.dumps(records), encoding="utf-8")
+    config = HardTestPreparationConfig(
+        dataset_version="hard-test-dataset-v1",
+        corpus_version="hard-test-corpus-v1",
+        question_count=3,
+        expected_source_sha256=hashlib.sha256(source_path.read_bytes()).hexdigest(),
+    )
+
+    result = prepare_benchmark(source_path=source_path, output_root=tmp_path / "out", config=config)
+
+    dataset_records = tuple(read_jsonl(result.dataset_directory / "dataset.jsonl"))
+    assert result.dataset_manifest.source.split == "train"
+    assert result.dataset_manifest.schema_version == "1.1"
+    assert result.corpus_manifest.schema_version == "1.1"
+    assert result.dataset_manifest.eligible_question_count == 3
+    assert result.dataset_manifest.selected_question_count == 3
+    assert result.dataset_manifest.generation.generator_version == "hotpotqa-preparation-v2"
+    assert all(record["evaluation"]["difficulty"] == "hard" for record in dataset_records)
 
 
 def test_validation_detects_artifact_tampering(tmp_path: Path) -> None:

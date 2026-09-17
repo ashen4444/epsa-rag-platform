@@ -10,7 +10,7 @@ import pytest
 
 from epsa_rag.core.exceptions import SourceValidationError
 from epsa_rag.core.ids import stable_digest
-from epsa_rag.data.config import PreparationConfig
+from epsa_rag.data.config import HardTestPreparationConfig, PreparationConfig
 from epsa_rag.data.hotpotqa import download_source, load_selected_source, load_source
 
 
@@ -147,7 +147,78 @@ def test_selected_source_records_invalid_unselected_examples(tmp_path: Path) -> 
 
     assert tuple(example.question_id for example in selected.examples) == tuple(ranked_ids[:2])
     assert selected.source_record_count == 3
+    assert selected.eligible_record_count == 3
     assert selected.invalid_unselected_question_ids == (invalid_id,)
+
+
+def test_selected_source_filters_difficulty_before_deterministic_ranking(
+    tmp_path: Path,
+) -> None:
+    records = [
+        raw_example("hard-1"),
+        {**raw_example("medium-1"), "level": "medium"},
+        raw_example("hard-2"),
+        {**raw_example("easy-1"), "level": "easy"},
+    ]
+    content = source_bytes(*records)
+    path = tmp_path / "source.json"
+    path.write_bytes(content)
+    config = HardTestPreparationConfig(
+        question_count=2,
+        expected_source_sha256=hashlib.sha256(content).hexdigest(),
+    )
+
+    selected = load_selected_source(path, config=config)
+
+    expected_ids = sorted(
+        ("hard-1", "hard-2"),
+        key=lambda value: (stable_digest(str(config.selection_seed), value), value),
+    )
+    assert [example.question_id for example in selected.examples] == expected_ids
+    assert all(example.level == "hard" for example in selected.examples)
+    assert selected.source_record_count == 4
+    assert selected.eligible_record_count == 2
+
+
+def test_selected_source_rejects_more_questions_than_eligible_records(tmp_path: Path) -> None:
+    records = [raw_example("hard-1"), {**raw_example("medium-1"), "level": "medium"}]
+    content = source_bytes(*records)
+    path = tmp_path / "source.json"
+    path.write_bytes(content)
+    config = HardTestPreparationConfig(
+        question_count=2,
+        expected_source_sha256=hashlib.sha256(content).hexdigest(),
+    )
+
+    with pytest.raises(SourceValidationError, match="1 eligible records"):
+        load_selected_source(path, config=config)
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        (json.dumps({"not": "a list"}), "JSON array"),
+        (json.dumps([]), "at least one"),
+        ('[{"_id":"q1"}', "unable to load"),
+        ('[{"_id":}]', "unable to load"),
+        ('[{"_id":"q1"} {"_id":"q2"}]', "expected a comma"),
+        ("[] trailing", "content follows"),
+    ],
+)
+def test_selected_source_stream_rejects_invalid_roots(
+    tmp_path: Path,
+    content: str,
+    message: str,
+) -> None:
+    path = tmp_path / "source.json"
+    path.write_text(content, encoding="utf-8")
+    config = PreparationConfig(
+        question_count=1,
+        expected_source_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+    )
+
+    with pytest.raises(SourceValidationError, match=message):
+        load_selected_source(path, config=config)
 
 
 def test_selected_source_rejects_an_invalid_selected_example(tmp_path: Path) -> None:

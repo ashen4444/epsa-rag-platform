@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from epsa_rag.core.exceptions import SourceValidationError
 from epsa_rag.core.ids import make_content_id, make_evidence_unit_id, stable_digest
 from epsa_rag.core.models import ParagraphChunk, Sentence
-from epsa_rag.data.config import PreparationConfig
+from epsa_rag.data.config import PreparationConfiguration
 from epsa_rag.data.models import (
     BenchmarkExample,
     EvaluationLabels,
@@ -20,7 +20,7 @@ from epsa_rag.data.models import (
 
 def select_examples(
     examples: Sequence[HotPotQASourceExample],
-    config: PreparationConfig,
+    config: PreparationConfiguration,
 ) -> tuple[HotPotQASourceExample, ...]:
     """Select questions by a stable seed-and-ID hash rank."""
 

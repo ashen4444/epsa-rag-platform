@@ -14,7 +14,11 @@ from uuid import uuid4
 
 from epsa_rag.core.exceptions import DataPreparationError, FrozenArtifactError
 from epsa_rag.data.builder import build_artifacts
-from epsa_rag.data.config import PreparationConfig
+from epsa_rag.data.config import (
+    HardTestPreparationConfig,
+    PreparationConfig,
+    PreparationConfiguration,
+)
 from epsa_rag.data.hotpotqa import download_source, load_selected_source
 from epsa_rag.data.io import sha256_file, write_json_exclusive, write_jsonl_exclusive
 from epsa_rag.data.manifests import (
@@ -30,6 +34,7 @@ from epsa_rag.data.validation import (
 )
 
 DEFAULT_SOURCE_PATH = Path("data/raw/hotpotqa/hotpot_dev_distractor_v1.json")
+HARD_TEST_SOURCE_PATH = Path("data/raw/hotpotqa/hotpot_train_v1.1.json")
 DEFAULT_OUTPUT_ROOT = Path("data")
 
 
@@ -47,7 +52,7 @@ def prepare_benchmark(
     *,
     source_path: Path,
     output_root: Path,
-    config: PreparationConfig,
+    config: PreparationConfiguration,
     generated_at: datetime | None = None,
 ) -> PreparationResult:
     """Create and validate frozen dataset and corpus versions without overwrite."""
@@ -77,6 +82,11 @@ def prepare_benchmark(
     generation = GenerationManifest(
         generated_at=generated_at or datetime.now(UTC),
         configuration_fingerprint=config.fingerprint(),
+        generator_version=(
+            "hotpotqa-preparation-v2"
+            if isinstance(config, HardTestPreparationConfig)
+            else "hotpotqa-preparation-v1"
+        ),
     )
 
     output_root.mkdir(parents=True, exist_ok=True)
@@ -99,16 +109,23 @@ def prepare_benchmark(
             relative_path="corpus.jsonl",
         )
         dataset_manifest = DatasetManifest(
+            schema_version=(
+                "1.1" if isinstance(config, HardTestPreparationConfig) else "1.0"
+            ),
             version=config.dataset_version,
             source=source_manifest,
             generation=generation,
             configuration=config,
             source_question_count=selected_source.source_record_count,
+            eligible_question_count=selected_source.eligible_record_count,
             selected_question_count=len(prepared.examples),
             question_ids=tuple(example.inference.question_id for example in prepared.examples),
             files=(dataset_artifact,),
         )
         corpus_manifest = CorpusManifest(
+            schema_version=(
+                "1.1" if isinstance(config, HardTestPreparationConfig) else "1.0"
+            ),
             version=config.corpus_version,
             source_dataset_version=config.dataset_version,
             source=source_manifest,
@@ -163,13 +180,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Prepare the deterministic EPSA-RAG HotPotQA benchmark and global corpus."
     )
-    parser.add_argument("--source-path", type=Path, default=DEFAULT_SOURCE_PATH)
+    parser.add_argument(
+        "--profile",
+        choices=("development", "hard-test"),
+        default="development",
+        help="Select the frozen source, filtering, and artifact defaults",
+    )
+    parser.add_argument("--source-path", type=Path)
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
     parser.add_argument("--download", action="store_true")
-    parser.add_argument("--question-count", type=int, default=1_000)
-    parser.add_argument("--selection-seed", type=int, default=42)
-    parser.add_argument("--dataset-version", default="hotpotqa_1000_v1")
-    parser.add_argument("--corpus-version", default="hotpotqa_10000_v1")
+    parser.add_argument("--question-count", type=int)
+    parser.add_argument("--selection-seed", type=int)
+    parser.add_argument("--dataset-version")
+    parser.add_argument("--corpus-version")
     return parser
 
 
@@ -178,13 +201,57 @@ def main() -> int:
 
     parser = build_parser()
     arguments = parser.parse_args()
-    config = PreparationConfig(
-        dataset_version=arguments.dataset_version,
-        corpus_version=arguments.corpus_version,
-        question_count=arguments.question_count,
-        selection_seed=arguments.selection_seed,
-    )
-    source_path: Path = arguments.source_path
+    if arguments.profile == "hard-test":
+        defaults: PreparationConfiguration = HardTestPreparationConfig()
+        config: PreparationConfiguration = HardTestPreparationConfig(
+            dataset_version=(
+                arguments.dataset_version
+                if arguments.dataset_version is not None
+                else defaults.dataset_version
+            ),
+            corpus_version=(
+                arguments.corpus_version
+                if arguments.corpus_version is not None
+                else defaults.corpus_version
+            ),
+            question_count=(
+                arguments.question_count
+                if arguments.question_count is not None
+                else defaults.question_count
+            ),
+            selection_seed=(
+                arguments.selection_seed
+                if arguments.selection_seed is not None
+                else defaults.selection_seed
+            ),
+        )
+        default_source_path = HARD_TEST_SOURCE_PATH
+    else:
+        defaults = PreparationConfig()
+        config = PreparationConfig(
+            dataset_version=(
+                arguments.dataset_version
+                if arguments.dataset_version is not None
+                else defaults.dataset_version
+            ),
+            corpus_version=(
+                arguments.corpus_version
+                if arguments.corpus_version is not None
+                else defaults.corpus_version
+            ),
+            question_count=(
+                arguments.question_count
+                if arguments.question_count is not None
+                else defaults.question_count
+            ),
+            selection_seed=(
+                arguments.selection_seed
+                if arguments.selection_seed is not None
+                else defaults.selection_seed
+            ),
+        )
+        default_source_path = DEFAULT_SOURCE_PATH
+    source_path: Path = arguments.source_path or default_source_path
     if arguments.download:
         download_source(
             uri=config.download_uri,
@@ -207,6 +274,7 @@ def main() -> int:
         "corpus_directory": str(result.corpus_directory),
         "dataset_directory": str(result.dataset_directory),
         "duplicate_paragraphs": result.corpus_manifest.duplicate_paragraph_count,
+        "eligible_questions": result.dataset_manifest.eligible_question_count,
         "selected_questions": result.dataset_manifest.selected_question_count,
         "unique_paragraphs": result.corpus_manifest.unique_paragraph_count,
     }
