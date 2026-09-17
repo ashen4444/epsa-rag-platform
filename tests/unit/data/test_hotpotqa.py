@@ -180,6 +180,35 @@ def test_selected_source_filters_difficulty_before_deterministic_ranking(
     assert selected.eligible_record_count == 2
 
 
+def test_hard_test_excludes_invalid_records_before_deterministic_ranking(
+    tmp_path: Path,
+) -> None:
+    seed = 42
+    ids = ["hard-1", "hard-2", "hard-3", "hard-4"]
+    ranked_ids = sorted(ids, key=lambda value: (stable_digest(str(seed), value), value))
+    invalid_id = ranked_ids[0]
+    records = [raw_example(question_id) for question_id in ids]
+    for record in records:
+        if record["_id"] == invalid_id:
+            record["supporting_facts"] = [["Title", 99]]
+    content = source_bytes(*records)
+    path = tmp_path / "source.json"
+    path.write_bytes(content)
+    config = HardTestPreparationConfig(
+        question_count=2,
+        selection_seed=seed,
+        expected_source_sha256=hashlib.sha256(content).hexdigest(),
+    )
+
+    selected = load_selected_source(path, config=config)
+
+    valid_ranked_ids = [question_id for question_id in ranked_ids if question_id != invalid_id]
+    assert [example.question_id for example in selected.examples] == valid_ranked_ids[:2]
+    assert selected.source_record_count == 4
+    assert selected.eligible_record_count == 3
+    assert selected.invalid_unselected_question_ids == (invalid_id,)
+
+
 def test_selected_source_rejects_more_questions_than_eligible_records(tmp_path: Path) -> None:
     records = [raw_example("hard-1"), {**raw_example("medium-1"), "level": "medium"}]
     content = source_bytes(*records)

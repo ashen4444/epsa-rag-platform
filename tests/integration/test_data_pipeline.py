@@ -83,10 +83,10 @@ def test_pipeline_publishes_validated_immutable_artifacts(tmp_path: Path) -> Non
         )
 
 
-def test_pipeline_publishes_a_filtered_hard_test_benchmark(tmp_path: Path) -> None:
+def test_pipeline_publishes_a_validity_filtered_hard_test_benchmark(tmp_path: Path) -> None:
     source_path = tmp_path / "train.json"
     records = []
-    for index, level in enumerate(("hard", "medium", "hard", "easy", "hard")):
+    for index, level in enumerate(("hard", "medium", "hard", "easy", "hard", "hard")):
         records.append(
             {
                 "_id": f"q{index}",
@@ -98,6 +98,7 @@ def test_pipeline_publishes_a_filtered_hard_test_benchmark(tmp_path: Path) -> No
                 "context": [[f"Title {index}", [f"Sentence {index}."]]],
             }
         )
+    records[0]["supporting_facts"] = [["Title 0", 99]]
     source_path.write_text(json.dumps(records), encoding="utf-8")
     config = HardTestPreparationConfig(
         dataset_version="hard-test-dataset-v1",
@@ -114,6 +115,8 @@ def test_pipeline_publishes_a_filtered_hard_test_benchmark(tmp_path: Path) -> No
     assert result.corpus_manifest.schema_version == "1.1"
     assert result.dataset_manifest.eligible_question_count == 3
     assert result.dataset_manifest.selected_question_count == 3
+    assert result.dataset_manifest.source.fully_validated_record_count == 5
+    assert result.dataset_manifest.source.invalid_unselected_question_ids == ("q0",)
     assert result.dataset_manifest.generation.generator_version == "hotpotqa-preparation-v2"
     assert all(record["evaluation"]["difficulty"] == "hard" for record in dataset_records)
 

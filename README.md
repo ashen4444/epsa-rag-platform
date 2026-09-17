@@ -60,8 +60,9 @@ The command creates `data/datasets/hotpotqa_1000_v1/` and
 `data/corpus/hotpotqa_10000_v1/`. It refuses to overwrite either version.
 
 The same pipeline has a separate, immutable profile for the held-out hard-question test
-benchmark. It filters the official HotPotQA training source to hard questions and selects 10,000
-question IDs by the same seeded SHA-256 ranking method. Do not generate this benchmark until the
+benchmark. It filters the official HotPotQA training source to valid hard-question records and
+selects 10,000 question IDs by a seeded SHA-256 ranking method. Invalid upstream gold references
+are excluded and recorded rather than repaired. Do not generate this benchmark until the
 development configuration is frozen.
 
 ```powershell

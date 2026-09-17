@@ -109,16 +109,28 @@ def load_selected_source(
 
     _require_digest(path, config.expected_source_sha256)
     difficulty_filter = getattr(config, "difficulty_filter", None)
+    requires_valid_eligibility = config.selection_method == "sha256-rank-valid-v1"
     question_ids: list[str] = []
     eligible_ids: list[str] = []
     seen_ids: set[str] = set()
     for index, value in enumerate(_iter_raw_source(path)):
         question_id = _validate_source_question_id(value, index=index, seen_ids=seen_ids)
         question_ids.append(question_id)
-        if difficulty_filter is None or (
+        satisfies_difficulty = difficulty_filter is None or (
             isinstance(value, dict) and value.get("level") == difficulty_filter
-        ):
-            eligible_ids.append(question_id)
+        )
+        if not satisfies_difficulty:
+            continue
+        if requires_valid_eligibility:
+            try:
+                example = HotPotQASourceExample.model_validate(value)
+            except ValidationError:
+                continue
+            if example.question_id != question_id:
+                raise SourceValidationError(
+                    f"question id changed during validation: {question_id}"
+                )
+        eligible_ids.append(question_id)
 
     if not question_ids:
         raise SourceValidationError("HotPotQA source must contain at least one example")

@@ -100,7 +100,7 @@ def test_main_resolves_the_hard_test_profile(
             dataset_directory=tmp_path / "data" / "datasets" / "test-v1",
             corpus_directory=tmp_path / "data" / "corpus" / "corpus-v1",
             dataset_manifest=SimpleNamespace(
-                eligible_question_count=15_661,
+                eligible_question_count=15_657,
                 selected_question_count=10_000,
             ),
             corpus_manifest=SimpleNamespace(
@@ -127,7 +127,7 @@ def test_main_resolves_the_hard_test_profile(
     assert isinstance(config, HardTestPreparationConfig)
     assert config.question_count == 10_000
     assert config.difficulty_filter == "hard"
-    assert '"eligible_questions": 15661' in capsys.readouterr().out
+    assert '"eligible_questions": 15657' in capsys.readouterr().out
 
 
 def test_main_reports_preparation_errors_as_cli_errors(

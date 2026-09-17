@@ -52,7 +52,7 @@ class HardTestPreparationConfig(ConfigModel):
     corpus_version: Identifier = "hotpotqa_hard_10000_test_corpus_v1"
     question_count: int = Field(default=10_000, ge=1)
     selection_seed: int = 42
-    selection_method: Literal["sha256-rank-v1"] = "sha256-rank-v1"
+    selection_method: Literal["sha256-rank-valid-v1"] = "sha256-rank-valid-v1"
     chunk_id_method: Literal["sha256-title-sentences-v1"] = "sha256-title-sentences-v1"
     deduplication_method: Literal["exact-chunk-id-v1"] = "exact-chunk-id-v1"
     benchmark_role: Literal["test"] = "test"

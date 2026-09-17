@@ -22,6 +22,7 @@ def test_hard_test_configuration_records_research_critical_choices() -> None:
     assert config.difficulty_filter == "hard"
     assert config.question_count == 10_000
     assert config.selection_seed == 42
+    assert config.selection_method == "sha256-rank-valid-v1"
     assert config.dataset_version == "hotpotqa_hard_10000_test_v1"
     assert config.corpus_version == "hotpotqa_hard_10000_test_corpus_v1"
     assert config.source_uri == TRAIN_SOURCE_URI
