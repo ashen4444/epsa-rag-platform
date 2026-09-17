@@ -116,11 +116,14 @@ def test_retrieve_cli_loads_indexes_and_prints_canonical_result(
         def __init__(self, **kwargs: Any) -> None:
             assert kwargs["bm25"] == "bm25"
             assert kwargs["dense"] == "dense"
+            assert kwargs["config"].retriever_version == "hybrid-retriever-v2"
+            assert kwargs["config"].fusion.bm25_weight == 0.3
+            assert kwargs["config"].fusion.dense_weight == 0.7
 
         def retrieve(self, query: Any) -> SimpleNamespace:
             assert query.text == "Who wrote it?"
             return SimpleNamespace(
-                model_dump_json=lambda **kwargs: '{"retriever_version":"hybrid-retriever-v1"}'
+                model_dump_json=lambda **kwargs: '{"retriever_version":"hybrid-retriever-v2"}'
             )
 
     monkeypatch.setattr(cli, "HybridRetriever", FakeHybridRetriever)

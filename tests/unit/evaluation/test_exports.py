@@ -20,7 +20,7 @@ def completed_export(evaluation_data, evaluation_metadata, tmp_path):
     corpus, benchmark, _ = evaluation_data
     retriever = MagicMock()
     retriever.retrieve.side_effect = lambda query, **k: RetrievalResult(
-        query=query, retriever_version="hybrid-retriever-v1", results=()
+        query=query, retriever_version="hybrid-retriever-v2", results=()
     )
     downstream = InMemoryInstrumentationSink()
     with DiagnosticExportSink(tmp_path / "exports", evaluation_metadata, downstream) as sink:

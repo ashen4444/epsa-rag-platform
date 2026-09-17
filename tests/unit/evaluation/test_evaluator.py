@@ -38,7 +38,7 @@ class FixtureRetriever:
         hits = tuple(
             RankedParagraphChunk(chunk=c, rank=i, score=1 / i) for i, c in enumerate(chunks, 1)
         )
-        result = RetrievalResult(query=query, retriever_version="hybrid-retriever-v1", results=hits)
+        result = RetrievalResult(query=query, retriever_version="hybrid-retriever-v2", results=hits)
         if self.invalid == "query":
             result = result.model_copy(update={"query": RetrievalQuery(text="wrong")})
         if self.invalid == "rank":

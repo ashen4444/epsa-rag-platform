@@ -153,6 +153,20 @@ def test_config_loaded_from_frozen_manifests(evaluation_runner):
         fusion=RRFConfig(),
     )
     assert config == EvaluationConfig().retriever
+    assert config.retriever_version == "hybrid-retriever-v2"
+    assert config.fusion.bm25_weight == 0.3
+    assert config.fusion.dense_weight == 0.7
+    v1 = pipeline.configuration_from_indexes(
+        corpus_directory=evaluation_runner["corpus_directory"],
+        index_root=evaluation_runner["index_root"],
+        bm25_version="bm25-v1",
+        dense_version="dense-openai-small-faiss-flatip-v1",
+        mode="hybrid",
+        retriever_version="hybrid-retriever-v1",
+        fusion=RRFConfig(bm25_weight=1.0, dense_weight=1.0),
+    )
+    assert v1.retriever_version == "hybrid-retriever-v1"
+    assert v1.fusion.bm25_weight == v1.fusion.dense_weight == 1.0
     config = pipeline.configuration_from_indexes(
         corpus_directory=evaluation_runner["corpus_directory"],
         index_root=evaluation_runner["index_root"],

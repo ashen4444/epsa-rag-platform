@@ -10,7 +10,13 @@ from pydantic import ValidationError
 
 from epsa_rag.core.exceptions import EpsaRagError
 from epsa_rag.core.models import RetrievalQuery
-from epsa_rag.retrieval.config import HybridRetrieverConfig, RRFConfig
+from epsa_rag.retrieval.config import (
+    DEFAULT_HYBRID_RETRIEVER_VERSION,
+    HYBRID_V2_BM25_WEIGHT,
+    HYBRID_V2_DENSE_WEIGHT,
+    HybridRetrieverConfig,
+    RRFConfig,
+)
 from epsa_rag.retrieval.corpus import FrozenCorpus
 from epsa_rag.retrieval.dense.embeddings import OpenAIEmbeddingProvider
 from epsa_rag.retrieval.dense.retriever import DenseRetriever
@@ -38,10 +44,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dense-index-version", default="dense-openai-small-faiss-flatip-v1"
     )
+    parser.add_argument(
+        "--retriever-version", default=DEFAULT_HYBRID_RETRIEVER_VERSION
+    )
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--rrf-rank-constant", type=int, default=60)
-    parser.add_argument("--bm25-weight", type=float, default=1.0)
-    parser.add_argument("--dense-weight", type=float, default=1.0)
+    parser.add_argument("--bm25-weight", type=float, default=HYBRID_V2_BM25_WEIGHT)
+    parser.add_argument("--dense-weight", type=float, default=HYBRID_V2_DENSE_WEIGHT)
     return parser
 
 
@@ -71,6 +80,7 @@ def main() -> int:
         bm25_manifest = load_index_manifest(bm25_directory)
         dense_manifest = load_index_manifest(dense_directory)
         config = HybridRetrieverConfig(
+            retriever_version=arguments.retriever_version,
             bm25=bm25_manifest.configuration,
             dense=dense_manifest.configuration,
             fusion=RRFConfig(

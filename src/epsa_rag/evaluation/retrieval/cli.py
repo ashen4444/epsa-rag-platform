@@ -18,7 +18,12 @@ from epsa_rag.evaluation.retrieval.pipeline import (
     configuration_from_indexes,
     run_benchmark,
 )
-from epsa_rag.retrieval.config import RRFConfig
+from epsa_rag.retrieval.config import (
+    DEFAULT_HYBRID_RETRIEVER_VERSION,
+    HYBRID_V2_BM25_WEIGHT,
+    HYBRID_V2_DENSE_WEIGHT,
+    RRFConfig,
+)
 from epsa_rag.retrieval.pipeline import DEFAULT_CORPUS_DIRECTORY, DEFAULT_INDEX_ROOT
 
 
@@ -37,11 +42,14 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--repository-root", type=Path, default=Path.cwd())
     run.add_argument("--bm25-index-version", default="bm25-v1")
     run.add_argument("--dense-index-version", default="dense-openai-small-faiss-flatip-v1")
+    run.add_argument(
+        "--retriever-version", default=DEFAULT_HYBRID_RETRIEVER_VERSION
+    )
     run.add_argument("--top-k", type=int, default=10)
     run.add_argument("--cutoffs", type=int, nargs="+", default=[1, 5, 10])
     run.add_argument("--rrf-rank-constant", type=int, default=60)
-    run.add_argument("--bm25-weight", type=float, default=1.0)
-    run.add_argument("--dense-weight", type=float, default=1.0)
+    run.add_argument("--bm25-weight", type=float, default=HYBRID_V2_BM25_WEIGHT)
+    run.add_argument("--dense-weight", type=float, default=HYBRID_V2_DENSE_WEIGHT)
     run.add_argument("--warmup-questions", type=int, default=0)
     run.add_argument("--question-limit", type=int)
     run.add_argument("--openai-timeout-seconds", type=float, default=60)
@@ -165,6 +173,7 @@ def main() -> int:
             bm25_version=args.bm25_index_version,
             dense_version=args.dense_index_version,
             mode=args.mode,
+            retriever_version=args.retriever_version,
             fusion=RRFConfig(
                 result_k=args.top_k,
                 rank_constant=args.rrf_rank_constant,

@@ -16,7 +16,13 @@ from epsa_rag.evaluation.retrieval.exports import DiagnosticExportSink, load_exp
 from epsa_rag.evaluation.retrieval.models import EvaluationConfig, RunMetadata, RunSummary
 from epsa_rag.evaluation.retrieval.provenance import code_provenance, runtime_provenance
 from epsa_rag.instrumentation.sinks import InstrumentationSink
-from epsa_rag.retrieval.config import BM25Config, DenseConfig, HybridRetrieverConfig, RRFConfig
+from epsa_rag.retrieval.config import (
+    DEFAULT_HYBRID_RETRIEVER_VERSION,
+    BM25Config,
+    DenseConfig,
+    HybridRetrieverConfig,
+    RRFConfig,
+)
 from epsa_rag.retrieval.corpus import FrozenCorpus
 from epsa_rag.retrieval.dense.embeddings import OpenAIEmbeddingProvider
 from epsa_rag.retrieval.dense.query_cache import (
@@ -275,6 +281,7 @@ def configuration_from_indexes(
     dense_version: str,
     mode: str,
     fusion: RRFConfig,
+    retriever_version: str = DEFAULT_HYBRID_RETRIEVER_VERSION,
 ) -> HybridRetrieverConfig:
     """Use frozen index settings, avoiding accidental divergence from how indexes were built."""
 
@@ -298,4 +305,9 @@ def configuration_from_indexes(
             dense = manifest.configuration
         else:
             raise ConfigurationError("index kind does not match its configuration")
-    return HybridRetrieverConfig(bm25=bm25, dense=dense, fusion=fusion)
+    return HybridRetrieverConfig(
+        retriever_version=retriever_version,
+        bm25=bm25,
+        dense=dense,
+        fusion=fusion,
+    )

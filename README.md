@@ -25,6 +25,12 @@ The Phase 1 foundation, Phase 2 data pipeline, Phase 3 retriever, and Phase 4 ev
 - reproducible run metadata, per-question traces, immutable diagnostic exports, and paired comparisons;
 - test, coverage, lint, and type-check configuration.
 
+The frozen default Hybrid Retriever is `hybrid-retriever-v2`. It uses weighted RRF with rank
+constant `60`, BM25 weight `0.3`, and dense weight `0.7`, selected on the 1,000-question
+development benchmark. The underlying `bm25-v1` and `dense-openai-small-faiss-flatip-v1`
+indexes are unchanged because v2 only changes fusion. Retriever v1 remains reproducible by explicitly selecting
+`--retriever-version hybrid-retriever-v1 --bm25-weight 1.0 --dense-weight 1.0`.
+
 The observability backend, EPSA components, and RAG pipelines are
 intentionally not implemented yet.
 
