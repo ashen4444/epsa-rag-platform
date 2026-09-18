@@ -31,8 +31,12 @@ development benchmark. The underlying `bm25-v1` and `dense-openai-small-faiss-fl
 indexes are unchanged because v2 only changes fusion. Retriever v1 remains reproducible by explicitly selecting
 `--retriever-version hybrid-retriever-v1 --bm25-weight 1.0 --dense-weight 1.0`.
 
-The observability backend, EPSA components, and RAG pipelines are
-intentionally not implemented yet.
+Phase 5A adds an optional PostgreSQL experiment-storage package with explicit migrations,
+validated export import, run registration, full traces, and a synchronous instrumentation sink.
+See [the storage setup and design](observability/database/README.md). Installing the research
+package alone does not install database dependencies or enable database delivery.
+
+The FastAPI API, dashboard, EPSA components, and RAG pipelines remain unimplemented.
 
 ## Development setup (PowerShell)
 

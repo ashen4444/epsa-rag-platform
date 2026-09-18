@@ -1,0 +1,37 @@
+name: Research and PostgreSQL storage checks
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: epsa-ci-only
+          POSTGRES_DB: epsa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d epsa_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      EPSA_TEST_DATABASE_URL: postgresql+psycopg://postgres:epsa-ci-only@localhost:5432/epsa_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[dev]' -e ./observability/database
+      - run: python -m ruff check .
+      - run: python -m mypy
+      - run: python -m mypy --config-file observability/database/pyproject.toml observability/database/src/epsa_observability
+      - run: python -m pytest
+      - run: python -m pytest -c observability/database/pyproject.toml observability/database/tests --cov=epsa_observability --cov-branch --cov-report=term-missing --cov-fail-under=95
