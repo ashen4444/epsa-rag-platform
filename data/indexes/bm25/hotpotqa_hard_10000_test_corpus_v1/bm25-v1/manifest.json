@@ -1,0 +1,40 @@
+{
+  "artifact_type": "retrieval-index",
+  "backend": "epsa-okapi-bm25",
+  "chunk_count": 87541,
+  "chunk_id_order_sha256": "03d9674507c50c8e6268fc554fa8c50a0085c6502b5ab3e46417a455c2ce4204",
+  "configuration": {
+    "b": 0.75,
+    "backend": "epsa-okapi-bm25",
+    "candidate_k": 100,
+    "index_paragraph_text": true,
+    "index_title": true,
+    "index_version": "bm25-v1",
+    "k1": 1.5,
+    "tokenizer": "unicode-word-casefold-v1"
+  },
+  "configuration_fingerprint": "f1456010874aea227457ab045a1466f3cbde77b645a7d8414b789d6fb29758b6",
+  "corpus_file_sha256": "e103fff91100fc39a70e1d7cdb8f4a2c009c1c59012a55c6d915ec16389593b4",
+  "corpus_manifest_sha256": "8f0452a2bbcc26ed8074d52ad49e6d51b0bdcaa5fdcd67f321b8907eae9f617b",
+  "corpus_version": "hotpotqa_hard_10000_test_corpus_v1",
+  "dependencies": [
+    {
+      "name": "python",
+      "version": "3.12.10"
+    }
+  ],
+  "files": [
+    {
+      "byte_count": 60614772,
+      "record_count": 87541,
+      "relative_path": "index.json",
+      "sha256": "00442259ae593d1303ff4f9aeb5cb374f3666e6826891f551288d5cd52a77d4a"
+    }
+  ],
+  "generated_at": "2026-09-18T04:45:31.342797Z",
+  "generator": "epsa-rag-phase3",
+  "generator_version": "hybrid-retrieval-index-v1",
+  "index_kind": "bm25",
+  "index_version": "bm25-v1",
+  "schema_version": "1.0"
+}

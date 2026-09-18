@@ -1,0 +1,62 @@
+{
+  "artifact_type": "retrieval-index",
+  "backend": "faiss.IndexFlatIP",
+  "chunk_count": 87541,
+  "chunk_id_order_sha256": "03d9674507c50c8e6268fc554fa8c50a0085c6502b5ab3e46417a455c2ce4204",
+  "configuration": {
+    "backend": "faiss.IndexFlatIP",
+    "batch_size": 128,
+    "candidate_k": 100,
+    "dimensions": 1536,
+    "document_template": "Title: {title}\nText: {paragraph_text}",
+    "embedding_model": "text-embedding-3-small",
+    "encoding_format": "float",
+    "index_version": "dense-openai-small-faiss-flatip-v1",
+    "metric": "cosine-via-l2-normalized-inner-product",
+    "provider": "openai",
+    "query_template": "{query_text}",
+    "vector_dtype": "float32"
+  },
+  "configuration_fingerprint": "9722dff1b031b59875b9206bac054af2672423c2b12799048469f592836049f4",
+  "corpus_file_sha256": "e103fff91100fc39a70e1d7cdb8f4a2c009c1c59012a55c6d915ec16389593b4",
+  "corpus_manifest_sha256": "8f0452a2bbcc26ed8074d52ad49e6d51b0bdcaa5fdcd67f321b8907eae9f617b",
+  "corpus_version": "hotpotqa_hard_10000_test_corpus_v1",
+  "dependencies": [
+    {
+      "name": "faiss-cpu",
+      "version": "1.15.0"
+    },
+    {
+      "name": "numpy",
+      "version": "2.5.3"
+    },
+    {
+      "name": "openai",
+      "version": "2.54.0"
+    },
+    {
+      "name": "python",
+      "version": "3.12.10"
+    }
+  ],
+  "files": [
+    {
+      "byte_count": 537851949,
+      "record_count": 87541,
+      "relative_path": "index.faiss",
+      "sha256": "30d16763e84b9a58058f19213e3fef28a24cf0965d8853e3fb41318bdb0e105f"
+    },
+    {
+      "byte_count": 6390532,
+      "record_count": 87541,
+      "relative_path": "chunk_ids.json",
+      "sha256": "7e7f90682721a1393bf7f5ad42fa3da3e540d4df9b5a052917a483bf29b5ac1e"
+    }
+  ],
+  "generated_at": "2026-09-18T06:09:23.740024Z",
+  "generator": "epsa-rag-phase3",
+  "generator_version": "hybrid-retrieval-index-v1",
+  "index_kind": "dense",
+  "index_version": "dense-openai-small-faiss-flatip-v1",
+  "schema_version": "1.0"
+}
