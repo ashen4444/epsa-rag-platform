@@ -43,3 +43,7 @@ class EmbeddingError(RetrievalError):
 
 class QueryEmbeddingCacheError(EmbeddingError):
     """Raised when a query-embedding cache entry is missing or fails integrity checks."""
+
+
+class QuestionAnalysisError(EpsaRagError):
+    """Raised when Question Analyzer input or deterministic parsing is invalid."""

@@ -20,6 +20,7 @@ epsa-prepare-hotpotqa = "epsa_rag.data.pipeline:main"
 epsa-build-retrieval-indexes = "epsa_rag.retrieval.pipeline:main"
 epsa-retrieve = "epsa_rag.retrieval.cli:main"
 epsa-evaluate-retriever = "epsa_rag.evaluation.retrieval.cli:main"
+epsa-evaluate-question-analyzer = "epsa_rag.evaluation.components.question_analyzer_cli:main"
 
 [project.optional-dependencies]
 dev = [
