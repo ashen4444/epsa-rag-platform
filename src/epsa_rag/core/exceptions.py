@@ -47,3 +47,7 @@ class QueryEmbeddingCacheError(EmbeddingError):
 
 class QuestionAnalysisError(EpsaRagError):
     """Raised when Question Analyzer input or deterministic parsing is invalid."""
+
+
+class ChunkAnalysisError(EpsaRagError):
+    """Raised when a retrieved chunk cannot be analyzed by Component 02."""
