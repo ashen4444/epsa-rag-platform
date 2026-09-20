@@ -51,3 +51,7 @@ class QuestionAnalysisError(EpsaRagError):
 
 class ChunkAnalysisError(EpsaRagError):
     """Raised when a retrieved chunk cannot be analyzed by Component 02."""
+
+
+class EvidenceUnitExtractionError(EpsaRagError):
+    """Raised when Component 03 input or sentence extraction is invalid."""

@@ -22,6 +22,7 @@ epsa-retrieve = "epsa_rag.retrieval.cli:main"
 epsa-evaluate-retriever = "epsa_rag.evaluation.retrieval.cli:main"
 epsa-evaluate-question-analyzer = "epsa_rag.evaluation.components.question_analyzer_cli:main"
 epsa-evaluate-chunk-analyzer = "epsa_rag.evaluation.components.chunk_analyzer_cli:main"
+epsa-evaluate-evidence-units = "epsa_rag.evaluation.components.evidence_units_cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -63,6 +64,10 @@ select = ["B", "E", "F", "I", "PT", "RUF", "UP"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["epsa_rag"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/epsa_rag/epsa/evidence_units/historical_rules.py" = ["RUF001"]
+"src/epsa_rag/epsa/evidence_units/sentences.py" = ["RUF001"]
 
 [tool.mypy]
 python_version = "3.12"
