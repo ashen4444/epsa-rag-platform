@@ -59,3 +59,7 @@ class EvidenceUnitExtractionError(EpsaRagError):
 
 class EvidenceScoringError(EpsaRagError):
     """Raised when Component 04 input or score calculation is invalid."""
+
+
+class EvidenceGraphBuildError(EpsaRagError):
+    """Raised when Component 05 cannot construct a valid evidence graph."""
