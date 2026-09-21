@@ -67,3 +67,7 @@ class EvidenceGraphBuildError(EpsaRagError):
 
 class EvidencePathSearchError(EpsaRagError):
     """Raised when Component 06 cannot produce valid candidate evidence paths."""
+
+
+class SufficiencyDecisionError(EpsaRagError):
+    """Raised when Component 07 cannot make a valid sufficiency decision."""
