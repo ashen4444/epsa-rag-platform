@@ -55,3 +55,7 @@ class ChunkAnalysisError(EpsaRagError):
 
 class EvidenceUnitExtractionError(EpsaRagError):
     """Raised when Component 03 input or sentence extraction is invalid."""
+
+
+class EvidenceScoringError(EpsaRagError):
+    """Raised when Component 04 input or score calculation is invalid."""
