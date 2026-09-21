@@ -63,3 +63,7 @@ class EvidenceScoringError(EpsaRagError):
 
 class EvidenceGraphBuildError(EpsaRagError):
     """Raised when Component 05 cannot construct a valid evidence graph."""
+
+
+class EvidencePathSearchError(EpsaRagError):
+    """Raised when Component 06 cannot produce valid candidate evidence paths."""
