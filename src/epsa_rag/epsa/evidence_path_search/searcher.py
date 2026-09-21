@@ -45,7 +45,7 @@ class _GraphIndex:
     evidence_by_sentence: dict[str, ScoredEvidenceUnit]
     evidence_unit_by_sentence: dict[str, str]
     evidence_score_by_sentence: dict[str, float]
-    retrieval_rank_by_sentence: dict[str, int | None]
+    retrieval_rank_by_sentence: dict[str, int]
 
 
 class EvidencePathSearcherV1:
@@ -486,11 +486,11 @@ class EvidencePathSearcherV1:
             if _looks_specific(index.nodes[answer_id].label)
             else 0.0
         )
-        ranks = tuple(
-            rank
+        ranks = [
+            index.retrieval_rank_by_sentence[sentence_id]
             for sentence_id in sentence_ids
-            if (rank := index.retrieval_rank_by_sentence[sentence_id]) is not None
-        )
+            if sentence_id in index.retrieval_rank_by_sentence
+        ]
         retrieval_quality = 1.0 / min(ranks) if ranks else 0.0
         breakdown = PathScoreBreakdown(
             average_evidence_score=round(average, 6),
@@ -525,14 +525,16 @@ class EvidencePathSearcherV1:
         evidence_by_sentence: dict[str, ScoredEvidenceUnit] = {}
         evidence_ids: dict[str, str] = {}
         evidence_scores: dict[str, float] = {}
-        retrieval_ranks: dict[str, int | None] = {}
+        retrieval_ranks: dict[str, int] = {}
 
         for node in graph.nodes:
             if node.node_type is GraphNodeType.SENTENCE and node.scored_evidence is not None:
                 evidence_by_sentence[node.node_id] = node.scored_evidence
                 evidence_ids[node.node_id] = node.scored_evidence.evidence_unit.evidence_unit_id
                 evidence_scores[node.node_id] = node.scored_evidence.final_score
-                retrieval_ranks[node.node_id] = node.scored_evidence.evidence_unit.retrieval_rank
+                retrieval_rank = node.scored_evidence.evidence_unit.retrieval_rank
+                if retrieval_rank is not None:
+                    retrieval_ranks[node.node_id] = retrieval_rank
         for edge in graph.edges:
             outgoing[(edge.source_id, edge.edge_type)].append(edge)
             if edge.edge_type is GraphEdgeType.SENTENCE_MENTIONS_ENTITY:
@@ -552,6 +554,14 @@ class EvidencePathSearcherV1:
             elif edge.edge_type is GraphEdgeType.POSSIBLE_ANSWER_CANDIDATE:
                 possible_answers[edge.source_id].add(edge.target_id)
 
+        answer_types_by_sentence: dict[str, tuple[AnswerType, ...]] = {}
+        for sentence_id, values in sentence_answer_types.items():
+            unique_values: list[AnswerType] = []
+            for value in values:
+                if value not in unique_values:
+                    unique_values.append(value)
+            answer_types_by_sentence[sentence_id] = tuple(unique_values)
+
         return _GraphIndex(
             nodes=nodes,
             outgoing_by_type={key: tuple(value) for key, value in outgoing.items()},
@@ -564,9 +574,7 @@ class EvidencePathSearcherV1:
             sentence_to_relations={
                 key: _dedupe_preserve_order(value) for key, value in sentence_relations.items()
             },
-            sentence_to_answer_types={
-                key: tuple(dict.fromkeys(value)) for key, value in sentence_answer_types.items()
-            },
+            sentence_to_answer_types=answer_types_by_sentence,
             seed_to_sentences={key: tuple(value) for key, value in seed_sentences.items()},
             possible_answer_targets={
                 key: frozenset(value) for key, value in possible_answers.items()
@@ -724,15 +732,8 @@ def _normalize(value: str) -> str:
 
 def _looks_specific(label: str) -> bool:
     generic = {
-        "person",
-        "location",
-        "date",
-        "number",
-        "boolean",
-        "entity",
-        "organization",
-        "title_or_work",
-        "unknown",
+        "person", "location", "date", "number", "boolean", "entity", "organization",
+        "title_or_work", "unknown",
     }
     return _normalize(label) not in generic and any(character.isalnum() for character in label)
 
