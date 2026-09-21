@@ -257,7 +257,8 @@ def write_evidence_path_markdown_report(
         "# EPSA Component 06 - 1,000-Question Development Results",
         "",
         "Inference-visible Components 01-06 diagnostic output. Candidate paths are not answers "
-        "or sufficiency decisions. No HotPotQA gold answers or supporting-fact labels are included.",
+        "or sufficiency decisions. No HotPotQA gold answers or supporting-fact labels are "
+        "included.",
         "",
         f"Run ID: `{summary.run_id}`",
         f"Completed: {summary.completed_questions}; failed: {summary.failed_questions}",
@@ -265,7 +266,11 @@ def write_evidence_path_markdown_report(
         "",
     ]
     for trace in traces:
-        question = trace.question_analysis.raw_question if trace.question_analysis else "[unavailable]"
+        question = (
+            trace.question_analysis.raw_question
+            if trace.question_analysis is not None
+            else "[unavailable]"
+        )
         lines.extend(
             (
                 f"## {trace.question_id}",
@@ -337,7 +342,9 @@ def write_streaming_evidence_path_markdown_report(
                 stream.write(f"Status: {trace.status}\n\n")
                 stream.write(f"Candidate paths: {len(trace.candidate_paths)}\n\n")
                 stream.write(f"Error: {trace.error_type or 'none'}\n\n")
-                stream.write("| Rank | Path ID | Type | Answer candidate | Score | Evidence units |\n")
+                stream.write(
+                    "| Rank | Path ID | Type | Answer candidate | Score | Evidence units |\n"
+                )
                 stream.write("| ---: | --- | --- | --- | ---: | --- |\n")
                 for rank, path in enumerate(trace.candidate_paths, start=1):
                     answer = (path.answer_candidate or "").replace("|", "\\|").replace("\n", " ")
@@ -399,7 +406,9 @@ def append_streaming_evidence_path_markdown_report(
                 stream.write(f"Status: {trace.status}\n\n")
                 stream.write(f"Candidate paths: {len(trace.candidate_paths)}\n\n")
                 stream.write(f"Error: {trace.error_type or 'none'}\n\n")
-                stream.write("| Rank | Path ID | Type | Answer candidate | Score | Evidence units |\n")
+                stream.write(
+                    "| Rank | Path ID | Type | Answer candidate | Score | Evidence units |\n"
+                )
                 stream.write("| ---: | --- | --- | --- | ---: | --- |\n")
                 for rank, path in enumerate(trace.candidate_paths, start=1):
                     answer = (path.answer_candidate or "").replace("|", "\\|").replace("\n", " ")
