@@ -100,9 +100,9 @@ def evaluate_evidence_graphs(
     for item in inputs:
         started = perf_counter()
         analysis = None
-        candidates = []
-        units = []
-        scored = ()
+        candidates: list[CandidateChunkEvidence] = []
+        units: list[EvidenceUnit] = []
+        scored: tuple[ScoredEvidenceUnit, ...] = ()
         try:
             context = TraceContext.start(run_id=run_id, question_id=item.question.question_id)
             analysis = questions.analyze(item.question.text, trace_context=context)
