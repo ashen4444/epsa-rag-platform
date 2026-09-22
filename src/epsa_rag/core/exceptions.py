@@ -71,3 +71,7 @@ class EvidencePathSearchError(EpsaRagError):
 
 class SufficiencyDecisionError(EpsaRagError):
     """Raised when Component 07 cannot make a valid sufficiency decision."""
+
+
+class ContextPruningError(EpsaRagError):
+    """Raised when Component 08 cannot produce a valid pruned context."""
