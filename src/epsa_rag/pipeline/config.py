@@ -100,3 +100,28 @@ class AdaptiveBaselineConfig(ConfigModel):
     )
     controller: AdaptiveControllerConfig = Field(default_factory=AdaptiveControllerConfig)
     final_answer: FinalAnswerConfig = Field(default_factory=FinalAnswerConfig)
+
+
+class EPSAControllerConfig(ConfigModel):
+    """Frozen component-orchestration settings for one EPSA evidence pass."""
+
+    controller_version: Literal["epsa-controller-research-v1"] = (
+        "epsa-controller-research-v1"
+    )
+    max_paths: int = Field(default=10, ge=0)
+
+
+class EPSAPipelineConfig(ConfigModel):
+    """Configuration for strict, optionally two-hop EPSA RAG orchestration."""
+
+    pipeline_version: Literal["epsa-two-hop-rag-v1"] = "epsa-two-hop-rag-v1"
+    top_k: int = Field(ge=1)
+    max_additional_hops: Literal[1] = 1
+    insufficient_context_policy: Literal["strict_partial_pruned_sentences"] = (
+        "strict_partial_pruned_sentences"
+    )
+    context_format_version: Literal["epsa-pruned-sentences-v1"] = (
+        "epsa-pruned-sentences-v1"
+    )
+    controller: EPSAControllerConfig = Field(default_factory=EPSAControllerConfig)
+    final_answer: FinalAnswerConfig = Field(default_factory=FinalAnswerConfig)

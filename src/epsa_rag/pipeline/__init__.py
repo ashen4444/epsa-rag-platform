@@ -6,10 +6,22 @@ from epsa_rag.pipeline.baseline_pipeline import AdaptiveBaselinePipeline, FixedB
 from epsa_rag.pipeline.config import (
     AdaptiveBaselineConfig,
     AdaptiveControllerConfig,
+    EPSAControllerConfig,
+    EPSAPipelineConfig,
     FinalAnswerConfig,
     FixedBaselineConfig,
 )
-from epsa_rag.pipeline.context import render_full_paragraph_context
+from epsa_rag.pipeline.context import (
+    render_epsa_pruned_context,
+    render_full_paragraph_context,
+)
+from epsa_rag.pipeline.epsa_controller import EPSAController
+from epsa_rag.pipeline.epsa_models import (
+    EPSAPassResult,
+    EPSAPipelineTrace,
+    EPSATerminalState,
+)
+from epsa_rag.pipeline.epsa_pipeline import EPSAPipeline
 from epsa_rag.pipeline.merge import merge_retrieval_hops
 from epsa_rag.pipeline.models import (
     AdaptiveBaselineTrace,
@@ -30,6 +42,8 @@ from epsa_rag.pipeline.models import (
 )
 from epsa_rag.pipeline.protocols import (
     AdaptiveRetrievalControllerProtocol,
+    ContextualChunkAnalyzerProtocol,
+    EPSAControllerProtocol,
     FinalAnswerGeneratorProtocol,
     HybridRetrieverProtocol,
 )
@@ -45,6 +59,15 @@ __all__ = [
     "AdaptiveReasonCode",
     "AdaptiveRetrievalControllerProtocol",
     "AnswerGenerationRequest",
+    "ContextualChunkAnalyzerProtocol",
+    "EPSAController",
+    "EPSAControllerConfig",
+    "EPSAControllerProtocol",
+    "EPSAPassResult",
+    "EPSAPipeline",
+    "EPSAPipelineConfig",
+    "EPSAPipelineTrace",
+    "EPSATerminalState",
     "FinalAnswer",
     "FinalAnswerConfig",
     "FinalAnswerGeneratorProtocol",
@@ -62,5 +85,6 @@ __all__ = [
     "RenderedContext",
     "RetrievalOccurrence",
     "merge_retrieval_hops",
+    "render_epsa_pruned_context",
     "render_full_paragraph_context",
 ]
