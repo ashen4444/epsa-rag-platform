@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from enum import StrEnum
 from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
@@ -219,4 +220,135 @@ class FixedBaselineTrace(ContractModel):
         merged_ids = tuple(result.chunk.chunk_id for result in self.merged_retrieval.results)
         if self.final_answer_request.context.chunk_ids != merged_ids:
             raise ValueError("final-answer context must match the merged retrieval order")
+        return self
+
+
+class AdaptiveReasonCode(StrEnum):
+    """Stable controller outcomes used for diagnostics and stratified evaluation."""
+
+    SUFFICIENT = "sufficient"
+    MISSING_BRIDGE_EVIDENCE = "missing_bridge_evidence"
+    MISSING_COMPARISON_EVIDENCE = "missing_comparison_evidence"
+    MISSING_ANSWER_EVIDENCE = "missing_answer_evidence"
+    OTHER_MISSING_EVIDENCE = "other_missing_evidence"
+    INSUFFICIENT_NO_GROUNDED_QUERY = "insufficient_no_grounded_query"
+
+
+class AdaptiveControlRequest(ContractModel):
+    """Original question and complete Hop-1 context supplied to the LLM controller."""
+
+    question_id: Identifier
+    question: str
+    hop1_context: RenderedContext
+
+    @model_validator(mode="after")
+    def require_valid_request(self) -> AdaptiveControlRequest:
+        if not self.question.strip():
+            raise ValueError("adaptive-controller question must not be blank")
+        if self.hop1_context.context_kind != "full_paragraphs":
+            raise ValueError("adaptive controller requires full Hop-1 paragraphs")
+        return self
+
+
+class AdaptiveControlOutput(ContractModel):
+    """Five-field adaptive decision approved for the LLM baseline."""
+
+    sufficient: bool
+    reason_code: AdaptiveReasonCode
+    missing_evidence: str | None
+    evidence_document_numbers: tuple[Annotated[int, Field(ge=1)], ...]
+    next_hop_query: str | None
+
+    @field_validator("missing_evidence", "next_hop_query")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @model_validator(mode="after")
+    def require_consistent_decision(self) -> AdaptiveControlOutput:
+        if tuple(sorted(set(self.evidence_document_numbers))) != self.evidence_document_numbers:
+            raise ValueError("evidence document numbers must be unique and sorted")
+        if self.sufficient:
+            if (
+                self.reason_code is not AdaptiveReasonCode.SUFFICIENT
+                or self.missing_evidence is not None
+                or self.next_hop_query is not None
+            ):
+                raise ValueError("sufficient decisions cannot request missing evidence or Hop-2")
+            return self
+        if self.reason_code is AdaptiveReasonCode.SUFFICIENT or self.missing_evidence is None:
+            raise ValueError("insufficient decisions require missing evidence and a reason")
+        if (
+            self.next_hop_query is None
+            and self.reason_code is not AdaptiveReasonCode.INSUFFICIENT_NO_GROUNDED_QUERY
+        ):
+            raise ValueError("an unavailable query requires the no-grounded-query reason")
+        if (
+            self.next_hop_query is not None
+            and self.reason_code is AdaptiveReasonCode.INSUFFICIENT_NO_GROUNDED_QUERY
+        ):
+            raise ValueError("the no-grounded-query reason cannot contain a query")
+        return self
+
+
+class AdaptiveControlDecision(ContractModel):
+    """Controller output with exact model, prompt, usage, and latency provenance."""
+
+    output: AdaptiveControlOutput
+    response_id: Identifier
+    model: Identifier
+    controller_version: Identifier
+    prompt_version: Identifier
+    configuration_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    usage: LLMTokenUsage
+    latency_ms: float = Field(ge=0, allow_inf_nan=False)
+
+
+class AdaptiveBaselineTrace(ContractModel):
+    """Complete execution trace for one LLM-controlled adaptive baseline question."""
+
+    pipeline_version: Literal["adaptive-llm-two-hop-rag-v1"] = (
+        "adaptive-llm-two-hop-rag-v1"
+    )
+    question_id: Identifier
+    top_k: Annotated[int, Field(ge=1)]
+    hop1: RetrievalResult
+    controller_request: AdaptiveControlRequest
+    controller_decision: AdaptiveControlDecision
+    hop2: RetrievalResult | None
+    merged_retrieval: HopMergeResult
+    final_answer_request: AnswerGenerationRequest
+    final_answer: FinalAnswer
+    latency_ms: float = Field(ge=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def require_consistent_adaptive_flow(self) -> AdaptiveBaselineTrace:
+        if self.hop1.query.question_id != self.question_id:
+            raise ValueError("adaptive trace question ID must match Hop-1")
+        if self.controller_request.question_id != self.question_id:
+            raise ValueError("adaptive trace question ID must match controller request")
+        if self.final_answer_request.question_id != self.question_id:
+            raise ValueError("adaptive trace question ID must match final-answer request")
+        if len(self.hop1.results) > self.top_k:
+            raise ValueError("Hop-1 result count cannot exceed configured top_k")
+        query = self.controller_decision.output.next_hop_query
+        if query is None and self.hop2 is not None:
+            raise ValueError("Hop-2 retrieval requires a controller query")
+        if query is not None:
+            if self.hop2 is None or self.hop2.query.text != query:
+                raise ValueError("Hop-2 retrieval must execute the controller query")
+            if len(self.hop2.results) > self.top_k:
+                raise ValueError("Hop-2 result count cannot exceed configured top_k")
+        max_document = len(self.controller_request.hop1_context.chunk_ids)
+        if any(
+            number > max_document
+            for number in self.controller_decision.output.evidence_document_numbers
+        ):
+            raise ValueError("controller evidence document number exceeds Hop-1 context")
+        merged_ids = tuple(result.chunk.chunk_id for result in self.merged_retrieval.results)
+        if self.final_answer_request.context.chunk_ids != merged_ids:
+            raise ValueError("final-answer context must match adaptive merged retrieval")
         return self

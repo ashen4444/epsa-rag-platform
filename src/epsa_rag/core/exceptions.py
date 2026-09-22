@@ -87,3 +87,7 @@ class PipelineError(EpsaRagError):
 
 class AnswerGenerationError(PipelineError):
     """Raised when the final-answer boundary cannot produce a valid answer."""
+
+
+class AdaptiveControllerError(PipelineError):
+    """Raised when the adaptive LLM controller cannot produce a valid decision."""

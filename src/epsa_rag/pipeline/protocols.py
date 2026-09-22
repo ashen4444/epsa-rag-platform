@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from epsa_rag.core.models import RetrievalQuery
-from epsa_rag.pipeline.models import AnswerGenerationRequest, FinalAnswer
+from epsa_rag.pipeline.models import (
+    AdaptiveControlDecision,
+    AdaptiveControlRequest,
+    AnswerGenerationRequest,
+    FinalAnswer,
+)
 from epsa_rag.retrieval.models import RetrievalResult
 
 
@@ -28,3 +33,11 @@ class FinalAnswerGeneratorProtocol(Protocol):
 
     def generate(self, request: AnswerGenerationRequest) -> FinalAnswer:
         """Generate one answer from the original question and supplied context."""
+
+
+@runtime_checkable
+class AdaptiveRetrievalControllerProtocol(Protocol):
+    """LLM controller boundary used only by the adaptive baseline."""
+
+    def decide(self, request: AdaptiveControlRequest) -> AdaptiveControlDecision:
+        """Decide sufficiency and optionally propose one grounded retrieval query."""
