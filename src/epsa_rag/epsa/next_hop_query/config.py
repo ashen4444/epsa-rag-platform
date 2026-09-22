@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from epsa_rag.core.config import ConfigModel
 
@@ -19,9 +19,19 @@ class ReconstructedNextHopQueryGeneratorConfig(ConfigModel):
     mode: Literal["research_v1_reconstructed"] = "research_v1_reconstructed"
     schema_version: Literal["next-hop-query-v1-reconstructed"] = "next-hop-query-v1-reconstructed"
     query_separator: Literal[" "] = " "
-    bridge_query_confidence: Literal[0.65] = 0.65
-    comparison_query_confidence: Literal[0.50] = 0.50
-    seed_query_confidence: Literal[0.40] = 0.40
+    bridge_query_confidence: float = Field(default=0.65, ge=0, le=1)
+    comparison_query_confidence: float = Field(default=0.50, ge=0, le=1)
+    seed_query_confidence: float = Field(default=0.40, ge=0, le=1)
+
+    @model_validator(mode="after")
+    def require_reconstructed_constants(self) -> ReconstructedNextHopQueryGeneratorConfig:
+        if (
+            self.bridge_query_confidence != 0.65
+            or self.comparison_query_confidence != 0.50
+            or self.seed_query_confidence != 0.40
+        ):
+            raise ValueError("reconstructed confidence constants are fixed")
+        return self
 
 
 class HistoricalAdaptedNextHopQueryGeneratorConfig(ConfigModel):

@@ -249,7 +249,8 @@ class RuleBasedNextHopQueryGeneratorReconstructedV1:
                 continue
             relation = _relation_for_path(analysis, path)
             if relation is not None:
-                return target, relation, path
+                if target is not None:
+                    return target, relation, path
         return None
 
     def _comparison_query(
@@ -293,7 +294,10 @@ class RuleBasedNextHopQueryGeneratorReconstructedV1:
         target = _first_usable_entity(analysis.seed_entities)
         if target is None:
             return None
-        return target.text, relation, paths[0]
+        target_text = target.text
+        if target_text is None:
+            return None
+        return target_text, relation, paths[0]
 
     def _query(
         self,

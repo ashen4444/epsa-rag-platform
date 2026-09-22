@@ -6,6 +6,9 @@ import re
 from collections.abc import Sequence
 from time import perf_counter
 
+from pydantic import ValidationError
+
+from epsa_rag.core.exceptions import NextHopQueryGenerationError
 from epsa_rag.epsa.evidence_graph.models import EvidenceGraph
 from epsa_rag.epsa.evidence_path_search.models import EvidencePath
 from epsa_rag.epsa.next_hop_query.config import HistoricalAdaptedNextHopQueryGeneratorConfig
@@ -22,9 +25,7 @@ from epsa_rag.epsa.sufficiency_decision.models import SufficiencyDecision
 from epsa_rag.instrumentation import InstrumentationEvent, InstrumentationSink, TraceContext
 
 
-class RuleBasedNextHopQueryGeneratorHistoricalAdaptedV1(
-    RuleBasedNextHopQueryGeneratorReconstructedV1
-):
+class RuleBasedNextHopQueryGeneratorHistoricalAdaptedV1:
     """Implement recovered ``next_query_generator.py`` rules without retrieval execution.
 
     The original policy used prior mutable schemas. This adapter preserves its query
@@ -44,6 +45,43 @@ class RuleBasedNextHopQueryGeneratorHistoricalAdaptedV1(
     @property
     def config(self) -> HistoricalAdaptedNextHopQueryGeneratorConfig:
         return self._config
+
+    def generate(
+        self,
+        question_analysis: QuestionAnalysis,
+        sufficiency_decision: SufficiencyDecision,
+        evidence_graph: EvidenceGraph,
+        evidence_paths: Sequence[EvidencePath],
+        *,
+        trace_context: TraceContext | None = None,
+    ) -> NextHopQuery:
+        started = perf_counter()
+        try:
+            paths = RuleBasedNextHopQueryGeneratorReconstructedV1._validate_inputs(
+                question_analysis,
+                sufficiency_decision,
+                evidence_graph,
+                evidence_paths,
+            )
+            result = self._generate(
+                question_analysis,
+                sufficiency_decision,
+                evidence_graph,
+                paths,
+            )
+        except NextHopQueryGenerationError as error:
+            self._emit_failed(error, trace_context, started)
+            raise
+        except (ValidationError, ValueError, TypeError) as error:
+            wrapped = NextHopQueryGenerationError(str(error))
+            self._emit_failed(wrapped, trace_context, started)
+            raise wrapped from error
+        except Exception as error:
+            wrapped = NextHopQueryGenerationError("next-hop query generation failed")
+            self._emit_failed(wrapped, trace_context, started)
+            raise wrapped from error
+        self._emit_completed(result, trace_context, started)
+        return result
 
     def _generate(
         self,
@@ -315,6 +353,23 @@ class RuleBasedNextHopQueryGeneratorHistoricalAdaptedV1(
                         "reason_code": result.metadata.reason_code.value,
                         "confidence": result.confidence,
                         "selected_path_present": result.metadata.selected_path_id is not None,
+                    },
+                )
+            )
+
+    def _emit_failed(
+        self, error: NextHopQueryGenerationError, trace: TraceContext | None, started: float
+    ) -> None:
+        if self._sink is not None and trace is not None:
+            self._sink.emit(
+                InstrumentationEvent(
+                    context=trace,
+                    event_type="epsa.next_hop_query.failed",
+                    source="epsa.next_hop_query",
+                    source_version=self._config.mode,
+                    payload={
+                        "latency_ms": round((perf_counter() - started) * 1000, 6),
+                        "error_type": type(error).__name__,
                     },
                 )
             )
