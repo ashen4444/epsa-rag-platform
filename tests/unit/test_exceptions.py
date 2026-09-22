@@ -7,6 +7,7 @@ from epsa_rag.core.exceptions import (
     FrozenArtifactError,
     IndexIntegrityError,
     InstrumentationError,
+    NextHopQueryGenerationError,
     QuestionAnalysisError,
     RetrievalError,
     SourceValidationError,
@@ -19,6 +20,7 @@ def test_public_exceptions_share_one_catchable_root() -> None:
         ContractError,
         DataPreparationError,
         InstrumentationError,
+        NextHopQueryGenerationError,
         QuestionAnalysisError,
         RetrievalError,
     )

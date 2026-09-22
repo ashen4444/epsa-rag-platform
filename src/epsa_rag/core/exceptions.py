@@ -75,3 +75,7 @@ class SufficiencyDecisionError(EpsaRagError):
 
 class ContextPruningError(EpsaRagError):
     """Raised when Component 08 cannot produce a valid pruned context."""
+
+
+class NextHopQueryGenerationError(EpsaRagError):
+    """Raised when Component 09 cannot produce a valid next-hop query proposal."""
