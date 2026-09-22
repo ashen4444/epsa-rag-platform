@@ -79,3 +79,11 @@ class ContextPruningError(EpsaRagError):
 
 class NextHopQueryGenerationError(EpsaRagError):
     """Raised when Component 09 cannot produce a valid next-hop query proposal."""
+
+
+class PipelineError(EpsaRagError):
+    """Base class for baseline and EPSA orchestration failures."""
+
+
+class AnswerGenerationError(PipelineError):
+    """Raised when the final-answer boundary cannot produce a valid answer."""

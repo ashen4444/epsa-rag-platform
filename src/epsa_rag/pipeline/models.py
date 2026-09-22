@@ -9,6 +9,7 @@ from pydantic import Field, field_validator, model_validator
 
 from epsa_rag.core.ids import Identifier
 from epsa_rag.core.models import ContractModel, RankedParagraphChunk, RetrievalQuery
+from epsa_rag.retrieval.models import RetrievalResult
 
 
 class RetrievalOccurrence(ContractModel):
@@ -107,4 +108,115 @@ class HopMergeResult(ContractModel):
             raise ValueError("merged results must contain unique chunk IDs")
         if self.diagnostics.unique_chunks != len(self.results):
             raise ValueError("merge diagnostics must match the merged result count")
+        return self
+
+
+class RenderedContext(ContractModel):
+    """Deterministically rendered context with structural provenance."""
+
+    format_version: Identifier
+    context_kind: Literal["full_paragraphs", "pruned_sentences"]
+    chunk_ids: tuple[Identifier, ...]
+    text: str
+    character_count: Annotated[int, Field(ge=0)]
+
+    @model_validator(mode="after")
+    def require_matching_character_count(self) -> RenderedContext:
+        if self.character_count != len(self.text):
+            raise ValueError("context character count must match rendered text")
+        if len(self.chunk_ids) != len(set(self.chunk_ids)):
+            raise ValueError("rendered context chunk IDs must be unique")
+        return self
+
+
+class AnswerGenerationRequest(ContractModel):
+    """Provider-neutral final-answer request supplied identically by every system."""
+
+    question_id: Identifier
+    question: str
+    context: RenderedContext
+
+    @field_validator("question")
+    @classmethod
+    def require_nonblank_question(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("final-answer question must not be blank")
+        return value
+
+
+class FinalAnswerPayload(ContractModel):
+    """Structured answer-only schema returned by the final-answer model."""
+
+    answer: str
+
+    @field_validator("answer")
+    @classmethod
+    def require_nonblank_answer(cls, value: str) -> str:
+        answer = value.strip()
+        if not answer:
+            raise ValueError("generated answer must not be blank")
+        return answer
+
+
+class LLMTokenUsage(ContractModel):
+    """API-reported token usage for one model request."""
+
+    input_tokens: Annotated[int, Field(ge=0)]
+    output_tokens: Annotated[int, Field(ge=0)]
+    total_tokens: Annotated[int, Field(ge=0)]
+    cached_input_tokens: Annotated[int, Field(ge=0)] = 0
+
+    @model_validator(mode="after")
+    def require_consistent_total(self) -> LLMTokenUsage:
+        if self.total_tokens != self.input_tokens + self.output_tokens:
+            raise ValueError("total tokens must equal input plus output tokens")
+        if self.cached_input_tokens > self.input_tokens:
+            raise ValueError("cached input tokens cannot exceed input tokens")
+        return self
+
+
+class FinalAnswer(ContractModel):
+    """Inspectable final-answer output with exact model and usage provenance."""
+
+    answer: str
+    response_id: Identifier
+    model: Identifier
+    generator_version: Identifier
+    prompt_version: Identifier
+    configuration_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    usage: LLMTokenUsage
+    latency_ms: float = Field(ge=0, allow_inf_nan=False)
+
+    @field_validator("answer")
+    @classmethod
+    def require_nonblank_final_answer(cls, value: str) -> str:
+        answer = value.strip()
+        if not answer:
+            raise ValueError("final answer must not be blank")
+        return answer
+
+
+class FixedBaselineTrace(ContractModel):
+    """Complete output of one fixed one-hop baseline execution."""
+
+    pipeline_version: Literal["fixed-one-hop-rag-v1"] = "fixed-one-hop-rag-v1"
+    question_id: Identifier
+    top_k: Annotated[int, Field(ge=1)]
+    hop1: RetrievalResult
+    merged_retrieval: HopMergeResult
+    final_answer_request: AnswerGenerationRequest
+    final_answer: FinalAnswer
+    latency_ms: float = Field(ge=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def require_consistent_question_and_context(self) -> FixedBaselineTrace:
+        if self.hop1.query.question_id != self.question_id:
+            raise ValueError("baseline trace question ID must match Hop-1")
+        if self.final_answer_request.question_id != self.question_id:
+            raise ValueError("baseline trace question ID must match final-answer request")
+        if len(self.hop1.results) > self.top_k:
+            raise ValueError("Hop-1 result count cannot exceed configured top_k")
+        merged_ids = tuple(result.chunk.chunk_id for result in self.merged_retrieval.results)
+        if self.final_answer_request.context.chunk_ids != merged_ids:
+            raise ValueError("final-answer context must match the merged retrieval order")
         return self

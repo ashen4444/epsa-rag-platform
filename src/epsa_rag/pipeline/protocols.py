@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from epsa_rag.core.models import RetrievalQuery
+from epsa_rag.pipeline.models import AnswerGenerationRequest, FinalAnswer
 from epsa_rag.retrieval.models import RetrievalResult
 
 
@@ -19,3 +20,11 @@ class HybridRetrieverProtocol(Protocol):
         top_k: int | None = None,
     ) -> RetrievalResult:
         """Return backend-independent ranked paragraph chunks."""
+
+
+@runtime_checkable
+class FinalAnswerGeneratorProtocol(Protocol):
+    """Provider-neutral final-answer boundary shared by every evaluated system."""
+
+    def generate(self, request: AnswerGenerationRequest) -> FinalAnswer:
+        """Generate one answer from the original question and supplied context."""
