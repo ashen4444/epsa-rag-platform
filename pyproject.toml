@@ -13,6 +13,7 @@ dependencies = [
     "numpy>=2,<3",
     "openai>=2,<3",
     "pydantic>=2.12,<3",
+    "tiktoken>=0.14,<1",
 ]
 
 [project.scripts]
@@ -23,6 +24,7 @@ epsa-evaluate-retriever = "epsa_rag.evaluation.retrieval.cli:main"
 epsa-evaluate-question-analyzer = "epsa_rag.evaluation.components.question_analyzer_cli:main"
 epsa-evaluate-chunk-analyzer = "epsa_rag.evaluation.components.chunk_analyzer_cli:main"
 epsa-evaluate-evidence-units = "epsa_rag.evaluation.components.evidence_units_cli:main"
+epsa-evaluate-systems = "epsa_rag.evaluation.system.cli:main"
 
 [project.optional-dependencies]
 dev = [
